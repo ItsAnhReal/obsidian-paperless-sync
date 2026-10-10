@@ -1,0 +1,107 @@
+{
+	"tags": [
+		{ "id": 1, "name": "Steuer" },
+		{ "id": 2, "name": "Wohnung" },
+		{ "id": 3, "name": "Auto" },
+		{ "id": 4, "name": "Inbox" }
+	],
+	"correspondents": [
+		{ "id": 1, "name": "Finanzamt" },
+		{ "id": 2, "name": "Stadtwerke" },
+		{ "id": 3, "name": "Hausverwaltung Müller & Söhne" }
+	],
+	"document_types": [
+		{ "id": 1, "name": "Rechnung" },
+		{ "id": 2, "name": "Bescheid" },
+		{ "id": 3, "name": "Vertrag" }
+	],
+	"storage_paths": [{ "id": 1, "name": "Archiv" }],
+	"custom_fields": [
+		{ "id": 1, "name": "Betrag", "data_type": "monetary", "extra_data": { "select_options": null } },
+		{ "id": 2, "name": "Fällig am", "data_type": "date", "extra_data": { "select_options": null } },
+		{ "id": 3, "name": "Bezahlt", "data_type": "boolean", "extra_data": { "select_options": null } },
+		{
+			"id": 4,
+			"name": "Status",
+			"data_type": "select",
+			"extra_data": {
+				"select_options": [
+					{ "id": "aB3dE5", "label": "Offen" },
+					{ "id": "zY8xW6", "label": "Erledigt" }
+				]
+			}
+		}
+	],
+	"documents": [
+		{
+			"id": 1,
+			"title": "Mietvertrag Hauptstraße 12",
+			"correspondent": 3,
+			"document_type": 3,
+			"storage_path": 1,
+			"tags": [2],
+			"created": "2021-03-01",
+			"added": "2024-01-10T18:22:11.123456+01:00",
+			"archive_serial_number": 1,
+			"custom_fields": [],
+			"content": "Mietvertrag zwischen der Hausverwaltung und dem Mieter."
+		},
+		{
+			"id": 2,
+			"title": "Stromrechnung 03/2024: Abschlag",
+			"correspondent": 2,
+			"document_type": 1,
+			"storage_path": null,
+			"tags": [2, 4],
+			"created": "2024-03-15",
+			"added": "2024-03-16T07:01:00+01:00",
+			"archive_serial_number": null,
+			"custom_fields": [
+				{ "field": 1, "value": "EUR84.50" },
+				{ "field": 2, "value": "2024-03-29" },
+				{ "field": 3, "value": false },
+				{ "field": 4, "value": "aB3dE5" }
+			],
+			"content": "Ihr Abschlag für März 2024 beträgt 84,50 EUR."
+		},
+		{
+			"id": 3,
+			"title": "2023",
+			"correspondent": 1,
+			"document_type": 2,
+			"storage_path": 1,
+			"tags": [1],
+			"created": "2024-05-02",
+			"added": "2024-05-03T10:00:00+02:00",
+			"archive_serial_number": 2,
+			"custom_fields": [],
+			"content": "Bescheid über Einkommensteuer für 2023."
+		},
+		{
+			"id": 4,
+			"title": "Kfz-Steuer: \"Bescheid\" #4 [Entwurf]",
+			"correspondent": 1,
+			"document_type": 2,
+			"storage_path": null,
+			"tags": [1, 3],
+			"created": "2024-05-02",
+			"added": "2024-05-03T10:05:00+02:00",
+			"archive_serial_number": null,
+			"custom_fields": [{ "field": 3, "value": true }],
+			"content": "Kraftfahrzeugsteuerbescheid."
+		},
+		{
+			"id": 5,
+			"title": "Scan ohne Metadaten",
+			"correspondent": null,
+			"document_type": null,
+			"storage_path": null,
+			"tags": [],
+			"created": "2024-06-01",
+			"added": "2024-06-01T12:00:00+02:00",
+			"archive_serial_number": null,
+			"custom_fields": [],
+			"content": ""
+		}
+	]
+}

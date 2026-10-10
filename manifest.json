@@ -1,0 +1,10 @@
+{
+	"id": "paperless-sync",
+	"name": "Paperless Sync",
+	"version": "0.1.0",
+	"minAppVersion": "1.13.0",
+	"description": "Sync document metadata from Paperless-ngx into notes. Creates one note per document with properties you can link and query.",
+	"author": "ItsAnhReal",
+	"authorUrl": "https://github.com/ItsAnhReal",
+	"isDesktopOnly": false
+}

@@ -1,0 +1,21 @@
+# editors
+.vscode
+*.iml
+.idea
+
+# npm
+node_modules
+
+# The compiled main.js is attached to GitHub releases instead of committed.
+main.js
+*.map
+
+# obsidian
+data.json
+
+# local development
+dev/test-vault
+dev/.state
+.serena
+
+.DS_Store
