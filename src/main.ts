@@ -232,10 +232,15 @@ function summarize(result: SyncResult): string {
 /** Identifies the problems of a sync result; empty if there are none. */
 function problemKey(result: SyncResult): string {
 	const ids = result.failures.map((failure) => failure.documentId);
-	if (ids.length === 0 && result.duplicateIds.length === 0 && result.unavailable.length === 0) {
+	if (
+		ids.length === 0 &&
+		result.duplicateIds.length === 0 &&
+		result.unavailable.length === 0 &&
+		result.complete
+	) {
 		return '';
 	}
-	return JSON.stringify([ids, result.duplicateIds, result.unavailable]);
+	return JSON.stringify([ids, result.duplicateIds, result.unavailable, result.complete]);
 }
 
 function count(value: number, noun: string): string {

@@ -107,7 +107,8 @@ export async function runSync(
 		duplicateIds: [],
 		failures: [],
 		complete: listing.complete,
-		unavailable: [...lookups.unavailable],
+		// Sorted, because the lists are fetched in parallel and fail in any order.
+		unavailable: [...lookups.unavailable].sort(),
 	};
 
 	// The document text only goes into new notes, so it is fetched for those alone.

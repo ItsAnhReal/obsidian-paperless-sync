@@ -222,7 +222,7 @@ describe('runSync', () => {
 		server.state.documents[0] = makeDocument({ id: 1, title: 'Mietvertrag neu', correspondent: 5, tags: [1] });
 		const result = await sync();
 
-		expect(result.unavailable.sort()).toEqual(['correspondents', 'tags']);
+		expect(result.unavailable).toEqual(['correspondents', 'tags']);
 		expect(result.updated).toBe(1);
 		expect(vault.get(path).properties).toMatchObject({
 			paperless_title: 'Mietvertrag neu',
