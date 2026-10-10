@@ -35,6 +35,13 @@ export interface Paginated<T> {
 	results: T[];
 }
 
+export type LookupKind =
+	| 'tags'
+	| 'correspondents'
+	| 'documentTypes'
+	| 'storagePaths'
+	| 'customFields';
+
 /** Names of the objects that documents only reference by ID. */
 export interface Lookups {
 	tags: Map<number, string>;
@@ -42,6 +49,8 @@ export interface Lookups {
 	documentTypes: Map<number, string>;
 	storagePaths: Map<number, string>;
 	customFields: Map<number, CustomFieldDefinition>;
+	/** Lists the API user is not allowed to read. Their maps are empty. */
+	unavailable: Set<LookupKind>;
 }
 
 export interface ServerInfo {

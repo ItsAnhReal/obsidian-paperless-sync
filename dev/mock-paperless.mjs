@@ -52,9 +52,13 @@ const server = createServer((request, response) => {
 	if (url.searchParams.get('ordering') === 'id') {
 		items = [...items].sort((a, b) => a.id - b.id);
 	}
+	const ids = url.searchParams.get('id__in')?.split(',').map(Number);
+	if (ids !== undefined) items = items.filter((item) => ids.includes(item.id));
 	const page = Number(url.searchParams.get('page') ?? '1');
 	const pageSize = Number(url.searchParams.get('page_size') ?? '25');
 	const start = (page - 1) * pageSize;
+	// Like the real API, a page past the end is an error.
+	if (page > 1 && start >= items.length) return send(404, { detail: 'Invalid page.' });
 	const fields = url.searchParams.get('fields')?.split(',');
 	const results = items
 		.slice(start, start + pageSize)

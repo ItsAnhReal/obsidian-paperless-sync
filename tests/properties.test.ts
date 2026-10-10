@@ -6,6 +6,7 @@ import {
 	propertiesDiffer,
 	readDocumentId,
 	toWikilink,
+	unknownKeys,
 } from '../src/sync/properties';
 import type { CustomFieldDefinition } from '../src/paperless/types';
 import { makeDocument, makeLookups, SERVER } from './helpers';
@@ -184,6 +185,13 @@ describe('propertiesDiffer', () => {
 		expect(propertiesDiffer({ ...desired, paperless_missing: true }, desired)).toBe(true);
 		expect(propertiesDiffer({ ...desired, paperless_field_old: 'x' }, desired)).toBe(true);
 	});
+
+	it('ignores properties whose list the user may not read', () => {
+		const isUnknown = unknownKeys(new Set(['correspondents', 'customFields'] as const));
+		const current = { ...desired, paperless_correspondent: 'Finanzamt', paperless_field_old: 'x' };
+		expect(propertiesDiffer(current, desired, isUnknown)).toBe(false);
+		expect(propertiesDiffer({ ...current, paperless_document_type: 'Old' }, desired, isUnknown)).toBe(true);
+	});
 });
 
 describe('applyProperties', () => {
@@ -199,6 +207,16 @@ describe('applyProperties', () => {
 		applyProperties(target, { paperless_id: 42, paperless_title: 'New' });
 		expect(target).toEqual({ status: 'done', paperless_id: 42, paperless_title: 'New' });
 		expect(Object.keys(target)[0]).toBe('status');
+	});
+
+	it('keeps managed properties whose list the user may not read', () => {
+		const target: Record<string, unknown> = {
+			paperless_id: 42,
+			paperless_tags: ['Steuer'],
+			paperless_storage_path: 'Archiv',
+		};
+		applyProperties(target, { paperless_id: 42 }, unknownKeys(new Set(['tags'] as const)));
+		expect(target).toEqual({ paperless_id: 42, paperless_tags: ['Steuer'] });
 	});
 });
 
@@ -217,6 +235,7 @@ describe('readDocumentId', () => {
 describe('toWikilink', () => {
 	it('removes characters that would break the link', () => {
 		expect(toWikilink('A|B [C] #1')).toBe('[[A B C 1]]');
+		expect(toWikilink('"Müller & Söhne" <GmbH>?')).toBe('[[Müller & Söhne GmbH]]');
 		expect(toWikilink('###')).toBe('###');
 	});
 });

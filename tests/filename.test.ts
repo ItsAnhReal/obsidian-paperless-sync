@@ -83,6 +83,16 @@ describe('buildNotePath', () => {
 			'',
 		);
 		expect(buildNotePath('Paperless', '{{created}} {{title}}', empty, 9)).toBe('Paperless/Document 9.md');
+		expect(buildNotePath('Paperless', '{{correspondent}}/{{title}}', { ...variables, title: '???' }, 9)).toBe(
+			'Paperless/Stadtwerke/Document 9.md',
+		);
+	});
+
+	it('drops subfolders that render empty and ignores empty template parts', () => {
+		expect(buildNotePath('Paperless', '{{asn}}/{{title}}', { ...variables, asn: '' }, 7)).toBe(
+			'Paperless/Rechnung 03 2024 Strom.md',
+		);
+		expect(buildNotePath('Paperless', '/{{id}}//', variables, 7)).toBe('Paperless/7.md');
 	});
 
 	it('normalizes the folder and allows the vault root', () => {

@@ -1,5 +1,6 @@
 import type {
 	CustomFieldDefinition,
+	LookupKind,
 	Lookups,
 	PaperlessDocument,
 } from '../paperless/types';
@@ -26,6 +27,14 @@ export const CUSTOM_FIELD_PREFIX = 'paperless_field_';
 
 const FIXED_KEYS = new Set<string>(Object.values(PROPERTY));
 
+/** The property each lookup list provides the values for. */
+const LOOKUP_PROPERTY: Record<Exclude<LookupKind, 'customFields'>, string> = {
+	tags: PROPERTY.tags,
+	correspondents: PROPERTY.correspondent,
+	documentTypes: PROPERTY.documentType,
+	storagePaths: PROPERTY.storagePath,
+};
+
 export interface PropertyOptions {
 	/** Base URL used for links to documents, without a trailing slash. */
 	linkBaseUrl: string;
@@ -49,7 +58,7 @@ export function toDate(value: string | null | undefined): string | undefined {
 
 export function toWikilink(name: string): string {
 	const target = name
-		.replace(/[[\]|#^\\/:]/g, ' ')
+		.replace(/[[\]|#^\\/:*?"<>]/g, ' ')
 		.replace(/\s+/g, ' ')
 		.trim();
 	return target === '' ? name : `[[${target}]]`;
@@ -125,16 +134,30 @@ export function buildProperties(
 	return properties;
 }
 
+/**
+ * Managed properties whose values cannot be determined because the API user may not read
+ * the list they come from. Such properties are kept as they are instead of being removed.
+ */
+export function unknownKeys(unavailable: ReadonlySet<LookupKind>): (key: string) => boolean {
+	const keys = new Set<string>();
+	for (const [kind, key] of Object.entries(LOOKUP_PROPERTY)) {
+		if (unavailable.has(kind as LookupKind)) keys.add(key);
+	}
+	const customFields = unavailable.has('customFields');
+	return (key) => keys.has(key) || (customFields && key.startsWith(CUSTOM_FIELD_PREFIX));
+}
+
 /** True if a note's managed properties are not exactly the desired ones. */
 export function propertiesDiffer(
 	current: Record<string, unknown>,
 	desired: Properties,
+	isUnknown: (key: string) => boolean = () => false,
 ): boolean {
 	for (const [key, value] of Object.entries(desired)) {
 		if (!sameValue(current[key], value)) return true;
 	}
 	for (const key of Object.keys(current)) {
-		if (isManagedKey(key) && !(key in desired)) return true;
+		if (isStale(key, desired, isUnknown)) return true;
 	}
 	return false;
 }
@@ -143,11 +166,16 @@ export function propertiesDiffer(
 export function applyProperties(
 	target: Record<string, unknown>,
 	desired: Properties,
+	isUnknown: (key: string) => boolean = () => false,
 ): void {
 	for (const key of Object.keys(target)) {
-		if (isManagedKey(key) && !(key in desired)) delete target[key];
+		if (isStale(key, desired, isUnknown)) delete target[key];
 	}
 	for (const [key, value] of Object.entries(desired)) target[key] = value;
+}
+
+function isStale(key: string, desired: Properties, isUnknown: (key: string) => boolean): boolean {
+	return isManagedKey(key) && !(key in desired) && !isUnknown(key);
 }
 
 /** Property key per custom field ID. Fields are processed by ID so the result is stable. */

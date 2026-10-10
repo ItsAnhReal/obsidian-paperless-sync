@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PaperlessClient } from '../src/paperless/client';
+import { PaperlessClient, type HttpGet } from '../src/paperless/client';
 import { runSync, type SyncOptions, type SyncResult } from '../src/sync/engine';
 import {
 	createFakeServer,
@@ -164,15 +164,81 @@ describe('runSync', () => {
 		expect(vault.notes.size).toBe(1);
 	});
 
-	it('requests document text only when the note template uses it', async () => {
+	it('requests document text only for new notes and only when the note template uses it', async () => {
 		const { server, vault, sync } = setup();
-		server.state.documents = [makeDocument({ id: 1, title: 'Brief', content: 'Sehr geehrte Damen und Herren' })];
+		server.state.documents = [
+			makeDocument({ id: 1, title: 'Brief', content: 'Sehr geehrte Damen und Herren' }),
+			makeDocument({ id: 2, title: 'Antwort', content: 'Vielen Dank' }),
+		];
+		const asksForText = (): boolean =>
+			server.requests.some((request) => request.url.searchParams.get('fields')?.includes('content'));
 		await sync();
-		expect(server.requests.some((request) => request.url.searchParams.get('fields')?.includes('content'))).toBe(false);
+		expect(asksForText()).toBe(false);
 
-		vault.notes.clear();
+		vault.notes.delete('Paperless/2024-01-15 Brief.md');
+		server.requests.length = 0;
 		await sync({ noteTemplate: '{{content}}' });
 		expect(vault.get('Paperless/2024-01-15 Brief.md').body).toBe('Sehr geehrte Damen und Herren\n');
+		const textRequests = server.requests.filter((request) =>
+			request.url.searchParams.get('fields')?.includes('content'),
+		);
+		expect(textRequests.map((request) => request.url.searchParams.get('id__in'))).toEqual(['1']);
+
+		server.requests.length = 0;
+		await sync({ noteTemplate: '{{content}}' });
+		expect(asksForText()).toBe(false);
+	});
+
+	it('does not flag a document that slipped between pages while the list was fetched', async () => {
+		const server = createFakeServer({
+			documents: Array.from({ length: 150 }, (_, index) => makeDocument({ id: index + 1 })),
+		});
+		const vault = new FakeVault();
+		await runSync(new PaperlessClient(SERVER, TOKEN, server.httpGet), vault, DEFAULT_OPTIONS);
+
+		// After the first page, document 5 is deleted and document 151 is added, so document
+		// 101 moves to the first page and is not part of the listing.
+		const httpGet: HttpGet = async (url, headers) => {
+			const response = await server.httpGet(url, headers);
+			const params = new URL(url).searchParams;
+			if (params.get('ordering') === 'id' && params.get('page') === '1') {
+				server.state.documents = server.state.documents.filter((document) => document.id !== 5);
+				server.state.documents.push(makeDocument({ id: 151 }));
+			}
+			return response;
+		};
+		const result = await runSync(new PaperlessClient(SERVER, TOKEN, httpGet), vault, DEFAULT_OPTIONS);
+
+		expect(result).toMatchObject({ complete: true, missing: 0 });
+		const flagged = [...vault.notes.values()].filter((note) => note.properties.paperless_missing === true);
+		expect(flagged).toEqual([]);
+	});
+
+	it('keeps properties from lists the user may not read and reports them', async () => {
+		const { server, vault, sync } = setup();
+		await sync();
+		const path = 'Paperless/2024-01-15 Mietvertrag.md';
+		server.state.forbidden = ['/api/tags/', '/api/correspondents/'];
+		server.state.documents[0] = makeDocument({ id: 1, title: 'Mietvertrag neu', correspondent: 5, tags: [1] });
+		const result = await sync();
+
+		expect(result.unavailable.sort()).toEqual(['correspondents', 'tags']);
+		expect(result.updated).toBe(1);
+		expect(vault.get(path).properties).toMatchObject({
+			paperless_title: 'Mietvertrag neu',
+			paperless_correspondent: 'Hausverwaltung',
+			paperless_tags: ['Wohnung'],
+		});
+	});
+
+	it('records a document whose properties cannot be built and continues', async () => {
+		const { server, vault, sync } = setup();
+		server.state.correspondents = [{ id: 5, name: null as unknown as string }];
+		const result = await sync({ linkMetadata: true });
+
+		expect(result.failures.map((failure) => failure.documentId)).toEqual([1]);
+		expect(result.created).toBe(1);
+		expect(vault.notes.size).toBe(1);
 	});
 
 	it('uses the configured folder, file name template and link options', async () => {

@@ -29,10 +29,10 @@ paperless_field_betrag: EUR84.50
 
 ## Setup
 
-Requires Obsidian 1.13.0 or newer.
+Requires Obsidian 1.13.2 or newer.
 
 1. Install and enable the plugin.
-2. In Paperless-ngx, open **My Profile** and copy the API token. A dedicated user with view-only permissions is a good idea.
+2. In Paperless-ngx, open **My Profile** and copy the API token. A dedicated user with view-only permissions is a good idea: give it **View** for documents, tags, correspondents, document types, storage paths and custom fields. If one of the lists other than documents is not readable, the sync still runs and leaves the properties that come from that list as they are.
 3. In Obsidian, open **Settings → Paperless Sync** and enter the server address, for example `https://paperless.example.com`.
 4. Under **API token**, create a secret that holds the token.
 5. Select **Test connection**, then **Sync now**.
@@ -69,7 +69,8 @@ The plugin connects only to the Paperless-ngx server you configure, to read docu
 ## Limitations
 
 - File names are set when a note is created and are not changed when the document title changes later. The current title is always in `paperless_title`.
-- `{{content}}` is filled in when the note is created and is not updated afterwards.
+- `{{content}}` is filled in when the note is created and is not updated afterwards. The document text is only downloaded for new notes.
+- Links in the note text, such as the default `[Open in Paperless]({{url}})`, are not updated when the server address or the address for links changes. `paperless_url` always has the current link.
 - Document links in custom fields are written as document IDs.
 
 ## Development
