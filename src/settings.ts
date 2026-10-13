@@ -1,35 +1,12 @@
 import { PluginSettingTab, type App, type SettingDefinitionItem } from 'obsidian';
 import type PaperlessSyncPlugin from './main';
+import {
+	DEFAULT_SETTINGS,
+	isSettingKey,
+	MIN_SYNC_INTERVAL_MINUTES,
+	type PaperlessSyncSettings,
+} from './config';
 import { normalizeServerUrl } from './paperless/client';
-
-export interface PaperlessSyncSettings {
-	serverUrl: string;
-	/** Name of the secret in Obsidian's secret storage that holds the API token. */
-	tokenSecret: string;
-	folder: string;
-	fileNameTemplate: string;
-	noteTemplate: string;
-	linkMetadata: boolean;
-	includeCustomFields: boolean;
-	/** Minutes between automatic syncs; 0 syncs at startup only. */
-	syncIntervalMinutes: number;
-	/** Base URL for document links, if it differs from the server URL. */
-	linkBaseUrl: string;
-}
-
-export const DEFAULT_SETTINGS: PaperlessSyncSettings = {
-	serverUrl: '',
-	tokenSecret: '',
-	folder: 'Paperless',
-	fileNameTemplate: '{{created}} {{title}}',
-	noteTemplate: '[Open in Paperless]({{url}})\n',
-	linkMetadata: false,
-	includeCustomFields: true,
-	syncIntervalMinutes: 60,
-	linkBaseUrl: '',
-};
-
-export const MIN_SYNC_INTERVAL_MINUTES = 5;
 
 /** Not part of the synced settings: automatic sync is switched on per device. */
 const AUTO_SYNC_KEY = 'autoSync';
@@ -93,7 +70,7 @@ export class PaperlessSyncSettingTab extends PluginSettingTab {
 					},
 					{
 						name: 'File name',
-						desc: 'Template for new notes. Variables: {{title}}, {{id}}, {{created}}, {{created_year}}, {{created_month}}, {{correspondent}}, {{document_type}}, {{asn}}. Use a slash for subfolders.',
+						desc: 'Template for new notes. Variables: {{title}}, {{id}}, {{created}}, {{created_year}}, {{created_month}}, {{correspondent}}, {{document_type}}, {{storage_path}}, {{asn}}. Use a slash for subfolders.',
 						control: {
 							type: 'text',
 							key: 'fileNameTemplate',
@@ -192,8 +169,4 @@ export class PaperlessSyncSettingTab extends PluginSettingTab {
 		Object.assign(this.plugin.settings, { [key]: value });
 		await this.plugin.saveSettings();
 	}
-}
-
-function isSettingKey(key: string): key is keyof PaperlessSyncSettings {
-	return key in DEFAULT_SETTINGS;
 }

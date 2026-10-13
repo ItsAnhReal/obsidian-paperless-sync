@@ -1,6 +1,7 @@
 import type {
 	CustomFieldDefinition,
 	DocumentListing,
+	LookupKind,
 	Lookups,
 	NamedItem,
 	Paginated,
@@ -59,7 +60,6 @@ const DOCUMENT_FIELDS = [
 
 export interface DocumentListOptions {
 	includeCustomFields: boolean;
-	includeContent: boolean;
 }
 
 /** Trims the URL and removes trailing slashes. Returns `null` if it isn't an http(s) URL. */
@@ -115,7 +115,6 @@ export class PaperlessClient {
 	async listDocuments(options: DocumentListOptions): Promise<DocumentListing> {
 		const fields = [...DOCUMENT_FIELDS];
 		if (options.includeCustomFields) fields.push('custom_fields');
-		if (options.includeContent) fields.push('content');
 		const { items, count } = await this.listAll<PaperlessDocument>(
 			'/api/documents/',
 			{ ordering: 'id', fields: fields.join(',') },
@@ -126,26 +125,69 @@ export class PaperlessClient {
 		return { documents, complete: documents.length >= count };
 	}
 
+	/** Fetches the text of the given documents. Documents that no longer exist are left out. */
+	async fetchContents(ids: readonly number[]): Promise<Map<number, string>> {
+		const documents = await this.listByIds<{ id: number; content?: string }>(
+			ids,
+			'id,content',
+		);
+		return new Map(documents.map((document) => [document.id, document.content ?? '']));
+	}
+
+	/** Returns which of the given document IDs exist on the server. */
+	async existingIds(ids: readonly number[]): Promise<Set<number>> {
+		const documents = await this.listByIds<{ id: number }>(ids, 'id');
+		return new Set(documents.map((document) => document.id));
+	}
+
 	async fetchLookups(includeCustomFields: boolean): Promise<Lookups> {
-		const names = async (path: string): Promise<Map<number, string>> => {
-			const { items } = await this.listAll<NamedItem>(path, {});
-			return new Map(items.map((item) => [item.id, item.name]));
+		const unavailable = new Set<LookupKind>();
+		const load = async <T>(kind: LookupKind, path: string): Promise<T[]> => {
+			try {
+				return (await this.listAll<T>(path, {})).items;
+			} catch (error) {
+				// A user may be allowed to see documents but not, for example, storage paths.
+				if (error instanceof PaperlessError && error.kind === 'auth') {
+					unavailable.add(kind);
+					return [];
+				}
+				throw error;
+			}
 		};
-		const customFields = new Map<number, CustomFieldDefinition>();
-		if (includeCustomFields) {
-			const { items } = await this.listAll<CustomFieldDefinition>(
-				'/api/custom_fields/',
-				{},
-			);
-			for (const field of items) customFields.set(field.id, field);
-		}
+		const names = (items: NamedItem[]): Map<number, string> =>
+			new Map(items.map((item) => [item.id, item.name]));
+
+		const [tags, correspondents, documentTypes, storagePaths, customFields] =
+			await Promise.all([
+				load<NamedItem>('tags', '/api/tags/'),
+				load<NamedItem>('correspondents', '/api/correspondents/'),
+				load<NamedItem>('documentTypes', '/api/document_types/'),
+				load<NamedItem>('storagePaths', '/api/storage_paths/'),
+				includeCustomFields
+					? load<CustomFieldDefinition>('customFields', '/api/custom_fields/')
+					: Promise.resolve([]),
+			]);
 		return {
-			tags: await names('/api/tags/'),
-			correspondents: await names('/api/correspondents/'),
-			documentTypes: await names('/api/document_types/'),
-			storagePaths: await names('/api/storage_paths/'),
-			customFields,
+			tags: names(tags),
+			correspondents: names(correspondents),
+			documentTypes: names(documentTypes),
+			storagePaths: names(storagePaths),
+			customFields: new Map(customFields.map((field) => [field.id, field])),
+			unavailable,
 		};
+	}
+
+	private async listByIds<T>(ids: readonly number[], fields: string): Promise<T[]> {
+		const items: T[] = [];
+		for (let start = 0; start < ids.length; start += PAGE_SIZE) {
+			const chunk = ids.slice(start, start + PAGE_SIZE);
+			const page = await this.listAll<T>('/api/documents/', {
+				id__in: chunk.join(','),
+				fields,
+			});
+			items.push(...page.items);
+		}
+		return items;
 	}
 
 	/**
@@ -159,11 +201,19 @@ export class PaperlessClient {
 		const items: T[] = [];
 		let count = 0;
 		for (let page = 1; page <= MAX_PAGES; page++) {
-			const { body } = await this.get<Paginated<T>>(path, {
-				...params,
-				page: String(page),
-				page_size: String(PAGE_SIZE),
-			});
+			let body: Paginated<T>;
+			try {
+				({ body } = await this.get<Paginated<T>>(path, {
+					...params,
+					page: String(page),
+					page_size: String(PAGE_SIZE),
+				}));
+			} catch (error) {
+				// Paperless-ngx answers 404 for a page past the end, which happens when
+				// documents are deleted while the list is fetched. The count shows the gap.
+				if (page > 1 && error instanceof PaperlessError && error.kind === 'not-found') break;
+				throw error;
+			}
 			if (page === 1) count = body.count;
 			items.push(...body.results);
 			if (body.next === null || body.results.length === 0) break;

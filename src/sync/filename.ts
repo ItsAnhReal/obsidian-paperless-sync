@@ -83,11 +83,14 @@ export function buildNotePath(
 	for (const [key, value] of Object.entries(variables)) {
 		safe[key] = sanitizeFileName(value);
 	}
-	const segments = template
-		.split('/')
-		.map((segment) => sanitizeFileName(renderTemplate(segment, safe)))
-		.filter((segment) => segment !== '');
-	let name = segments.pop() ?? `Document ${id}`;
+	// The last part of the template is the file name, the parts before it are subfolders.
+	// A part that renders empty drops its subfolder; an empty file name falls back to the ID.
+	const parts = template.split('/').filter((part) => part.trim() !== '');
+	const render = (part: string): string => sanitizeFileName(renderTemplate(part, safe));
+	const segments = parts.slice(0, -1).map(render).filter((segment) => segment !== '');
+	const last = parts[parts.length - 1];
+	const rendered = last === undefined ? '' : render(last);
+	let name = rendered === '' ? `Document ${id}` : rendered;
 	if (attempt === 1) name = `${name} (${id})`;
 	if (attempt > 1) name = `${name} (${id}-${attempt})`;
 

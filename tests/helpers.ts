@@ -35,6 +35,7 @@ export function makeLookups(overrides: Partial<Lookups> = {}): Lookups {
 		documentTypes: new Map(),
 		storagePaths: new Map(),
 		customFields: new Map(),
+		unavailable: new Set(),
 		...overrides,
 	};
 }
@@ -59,6 +60,8 @@ export interface FakeServerState {
 	apiVersion: number | null;
 	/** Reported instead of the real document count, to simulate a truncated listing. */
 	reportedDocumentCount?: number;
+	/** List endpoints that answer 403, like for a user without the view permission. */
+	forbidden?: string[];
 }
 
 export interface FakeServer {
@@ -113,14 +116,24 @@ export function createFakeServer(initial: Partial<FakeServerState> = {}): FakeSe
 			'/api/storage_paths/': state.storagePaths,
 			'/api/custom_fields/': state.customFields,
 		};
-		const items = collections[url.pathname];
+		let items = collections[url.pathname];
 		if (items === undefined) {
 			return Promise.resolve(json(404, { detail: 'Not found.' }));
+		}
+		if (state.forbidden?.includes(url.pathname) === true) {
+			return Promise.resolve(json(403, { detail: 'Permission denied.' }));
+		}
+		const ids = url.searchParams.get('id__in')?.split(',').map(Number);
+		if (ids !== undefined) {
+			items = items.filter((item) => ids.includes((item as { id: number }).id));
 		}
 
 		const page = Number(url.searchParams.get('page') ?? '1');
 		const pageSize = Number(url.searchParams.get('page_size') ?? '25');
 		const start = (page - 1) * pageSize;
+		if (page > 1 && start >= items.length) {
+			return Promise.resolve(json(404, { detail: 'Invalid page.' }));
+		}
 		let results: unknown[] = items.slice(start, start + pageSize);
 		const fields = url.searchParams.get('fields')?.split(',');
 		if (fields !== undefined) {
@@ -132,7 +145,7 @@ export function createFakeServer(initial: Partial<FakeServerState> = {}): FakeSe
 				),
 			);
 		}
-		const isDocuments = url.pathname === '/api/documents/';
+		const isDocuments = url.pathname === '/api/documents/' && ids === undefined;
 		return Promise.resolve(
 			json(200, {
 				count:

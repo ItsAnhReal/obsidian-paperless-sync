@@ -7,7 +7,7 @@ import {
 } from '../src/paperless/client';
 import { createFakeServer, makeDocument, SERVER, TOKEN } from './helpers';
 
-const LIST_OPTIONS = { includeCustomFields: false, includeContent: false };
+const LIST_OPTIONS = { includeCustomFields: false };
 
 async function kindOf(action: Promise<unknown>): Promise<string> {
 	try {
@@ -81,12 +81,47 @@ describe('PaperlessClient', () => {
 		);
 	});
 
-	it('requests content and custom fields only when asked', async () => {
+	it('requests custom fields only when asked and never the document text', async () => {
 		const server = createFakeServer({ documents: [makeDocument({ id: 1, content: 'text' })] });
 		const client = new PaperlessClient(SERVER, TOKEN, server.httpGet);
-		const listing = await client.listDocuments({ includeCustomFields: true, includeContent: true });
-		expect(server.requests[0]?.url.searchParams.get('fields')).toMatch(/,custom_fields,content$/);
-		expect(listing.documents[0]?.content).toBe('text');
+		const listing = await client.listDocuments({ includeCustomFields: true });
+		expect(server.requests[0]?.url.searchParams.get('fields')).toMatch(/,custom_fields$/);
+		expect(listing.documents[0]).not.toHaveProperty('content');
+	});
+
+	it('fetches text and existence of selected documents in chunks of 100', async () => {
+		const documents = Array.from({ length: 150 }, (_, index) =>
+			makeDocument({ id: index + 1, content: `text ${index + 1}` }),
+		);
+		const server = createFakeServer({ documents });
+		const client = new PaperlessClient(SERVER, TOKEN, server.httpGet);
+		const ids = [...Array.from({ length: 120 }, (_, index) => index + 1), 999];
+
+		const contents = await client.fetchContents(ids);
+		expect(contents.size).toBe(120);
+		expect(contents.get(120)).toBe('text 120');
+		expect(server.requests).toHaveLength(2);
+		expect(server.requests[0]?.url.searchParams.get('fields')).toBe('id,content');
+
+		expect([...(await client.existingIds([3, 999, 150]))].sort((a, b) => a - b)).toEqual([3, 150]);
+		expect(server.requests.at(-1)?.url.searchParams.get('fields')).toBe('id');
+
+		const before = server.requests.length;
+		expect((await client.fetchContents([])).size).toBe(0);
+		expect(server.requests).toHaveLength(before);
+	});
+
+	it('marks the listing incomplete when a page disappears while it is fetched', async () => {
+		const documents = Array.from({ length: 150 }, (_, index) => makeDocument({ id: index + 1 }));
+		const server = createFakeServer({ documents });
+		const httpGet: HttpGet = async (url, headers) => {
+			const response = await server.httpGet(url, headers);
+			server.state.documents = server.state.documents.slice(0, 90);
+			return response;
+		};
+		const listing = await new PaperlessClient(SERVER, TOKEN, httpGet).listDocuments(LIST_OPTIONS);
+		expect(listing.documents).toHaveLength(100);
+		expect(listing.complete).toBe(false);
 	});
 
 	it('marks the listing incomplete when the server reports more documents than it returned', async () => {
@@ -118,6 +153,19 @@ describe('PaperlessClient', () => {
 
 		const withFields = await client.fetchLookups(true);
 		expect(withFields.customFields.get(1)?.name).toBe('Betrag');
+		expect(withFields.unavailable.size).toBe(0);
+	});
+
+	it('leaves out lists the user may not read', async () => {
+		const server = createFakeServer({
+			tags: [{ id: 1, name: 'Steuer' }],
+			storagePaths: [{ id: 4, name: 'Archiv' }],
+			forbidden: ['/api/storage_paths/', '/api/custom_fields/'],
+		});
+		const lookups = await new PaperlessClient(SERVER, TOKEN, server.httpGet).fetchLookups(true);
+		expect(lookups.tags.get(1)).toBe('Steuer');
+		expect(lookups.storagePaths.size).toBe(0);
+		expect([...lookups.unavailable].sort()).toEqual(['customFields', 'storagePaths']);
 	});
 
 	it('classifies failures', async () => {

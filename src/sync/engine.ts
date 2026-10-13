@@ -1,5 +1,5 @@
 import type { PaperlessClient } from '../paperless/client';
-import type { Lookups, PaperlessDocument, ServerInfo } from '../paperless/types';
+import type { LookupKind, Lookups, PaperlessDocument, ServerInfo } from '../paperless/types';
 import {
 	buildNotePath,
 	renderTemplate,
@@ -13,6 +13,7 @@ import {
 	PROPERTY,
 	propertiesDiffer,
 	readDocumentId,
+	unknownKeys,
 	type Properties,
 } from './properties';
 
@@ -60,8 +61,13 @@ export interface SyncResult {
 	/** Documents that have more than one note. */
 	duplicateIds: number[];
 	failures: SyncFailure[];
-	/** False if the document list was incomplete; missing documents are not flagged then. */
+	/**
+	 * False if the document list was incomplete or removed documents could not be checked;
+	 * missing documents are not flagged then.
+	 */
 	complete: boolean;
+	/** Lists the API user may not read; the properties that come from them were kept. */
+	unavailable: LookupKind[];
 }
 
 const MAX_NAME_ATTEMPTS = 5;
@@ -80,7 +86,6 @@ export async function runSync(
 	const lookups = await client.fetchLookups(options.includeCustomFields);
 	const listing = await client.listDocuments({
 		includeCustomFields: options.includeCustomFields,
-		includeContent: templateUses(options.noteTemplate, 'content'),
 	});
 
 	const notesById = new Map<number, NoteRef[]>();
@@ -102,25 +107,38 @@ export async function runSync(
 		duplicateIds: [],
 		failures: [],
 		complete: listing.complete,
+		// Sorted, because the lists are fetched in parallel and fail in any order.
+		unavailable: [...lookups.unavailable].sort(),
 	};
+
+	// The document text only goes into new notes, so it is fetched for those alone.
+	const contents = templateUses(options.noteTemplate, 'content')
+		? await client.fetchContents(
+				listing.documents
+					.filter((document) => !notesById.has(document.id))
+					.map((document) => document.id),
+			)
+		: new Map<number, string>();
+	const isUnknown = unknownKeys(lookups.unavailable);
 
 	const seen = new Set<number>();
 	for (const document of listing.documents) {
 		seen.add(document.id);
 		const notes = notesById.get(document.id);
-		const desired = buildProperties(document, lookups, options);
 		try {
+			const desired = buildProperties(document, lookups, options);
 			if (notes === undefined) {
-				await createNote(vault, document, lookups, desired, options);
+				const content = contents.get(document.id) ?? document.content;
+				await createNote(vault, { ...document, content }, lookups, desired, options);
 				result.created++;
 				continue;
 			}
 			if (notes.length > 1) result.duplicateIds.push(document.id);
 			let changed = false;
 			for (const note of notes) {
-				if (!propertiesDiffer(note.properties, desired)) continue;
+				if (!propertiesDiffer(note.properties, desired, isUnknown)) continue;
 				await vault.updateProperties(note.path, (properties) =>
-					applyProperties(properties, desired),
+					applyProperties(properties, desired, isUnknown),
 				);
 				changed = true;
 			}
@@ -132,9 +150,17 @@ export async function runSync(
 	}
 
 	if (listing.complete) {
-		for (const [id, notes] of notesById) {
-			if (seen.has(id)) continue;
-			for (const note of notes) {
+		const gone = [...notesById]
+			.filter(
+				([id, notes]) =>
+					!seen.has(id) &&
+					notes.some((note) => note.properties[PROPERTY.missing] !== true),
+			)
+			.map(([id]) => id);
+		const confirmed = await confirmGone(client, gone);
+		if (confirmed === null) result.complete = false;
+		for (const id of confirmed ?? []) {
+			for (const note of notesById.get(id) ?? []) {
 				if (note.properties[PROPERTY.missing] === true) continue;
 				try {
 					await vault.updateProperties(note.path, (properties) => {
@@ -186,6 +212,23 @@ async function createNote(
 	throw lastError instanceof Error
 		? lastError
 		: new Error('No free file name was found.');
+}
+
+/**
+ * Returns the IDs the server no longer knows, or `null` if it could not be asked. The
+ * document list can shift while it is fetched page by page, so a document that seems to be
+ * gone is checked once more before its notes are flagged.
+ */
+async function confirmGone(
+	client: PaperlessClient,
+	ids: number[],
+): Promise<number[] | null> {
+	try {
+		const existing = await client.existingIds(ids);
+		return ids.filter((id) => !existing.has(id));
+	} catch {
+		return null;
+	}
 }
 
 function failure(documentId: number, error: unknown): SyncFailure {

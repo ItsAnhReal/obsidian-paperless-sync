@@ -5,19 +5,31 @@ import { normalizeServerUrl, PaperlessClient, PaperlessError } from './paperless
 import {
 	DEFAULT_SETTINGS,
 	MIN_SYNC_INTERVAL_MINUTES,
-	PaperlessSyncSettingTab,
+	normalizeSettings,
 	type PaperlessSyncSettings,
-} from './settings';
+} from './config';
+import type { LookupKind } from './paperless/types';
+import { PaperlessSyncSettingTab } from './settings';
 import { runSync, type SyncOptions, type SyncResult } from './sync/engine';
 
 const AUTO_SYNC_STORAGE_KEY = 'paperless-sync-auto';
 const STARTUP_DELAY_MS = 10_000;
+
+const LOOKUP_NAMES: Record<LookupKind, string> = {
+	tags: 'tags',
+	correspondents: 'correspondents',
+	documentTypes: 'document types',
+	storagePaths: 'storage paths',
+	customFields: 'custom fields',
+};
 
 export default class PaperlessSyncPlugin extends Plugin {
 	settings: PaperlessSyncSettings = { ...DEFAULT_SETTINGS };
 	private syncing = false;
 	private statusBarEl: HTMLElement | null = null;
 	private intervalId: number | null = null;
+	/** Problems the last sync reported, so that automatic syncs do not repeat them. */
+	private lastProblems = '';
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -51,11 +63,7 @@ export default class PaperlessSyncPlugin extends Plugin {
 	}
 
 	async loadSettings(): Promise<void> {
-		this.settings = Object.assign(
-			{},
-			DEFAULT_SETTINGS,
-			(await this.loadData()) as Partial<PaperlessSyncSettings> | null,
-		);
+		this.settings = normalizeSettings(await this.loadData());
 	}
 
 	async saveSettings(): Promise<void> {
@@ -103,11 +111,12 @@ export default class PaperlessSyncPlugin extends Plugin {
 			const result = await runSync(client, new ObsidianVault(this.app), this.syncOptions());
 			const summary = summarize(result);
 			this.setStatus(`Paperless: ${currentTime()}`, summary);
+			const problems = problemKey(result);
 			const noteworthy =
 				result.created > 0 ||
 				result.missing > 0 ||
-				result.failures.length > 0 ||
-				result.duplicateIds.length > 0;
+				(problems !== '' && problems !== this.lastProblems);
+			this.lastProblems = problems;
 			if (manual || noteworthy) new Notice(summary);
 			return result;
 		} catch (error) {
@@ -204,15 +213,34 @@ function summarize(result: SyncResult): string {
 	if (result.failures.length > 0) {
 		const first = result.failures[0];
 		summary += ` ${count(result.failures.length, 'document')} failed`;
-		summary += first === undefined ? '.' : `, first: ${first.message}`;
+		summary +=
+			first === undefined ? '.' : `, first: document ${first.documentId}: ${first.message}`;
 	}
 	if (result.duplicateIds.length > 0) {
 		summary += ` More than one note exists for document ${result.duplicateIds.slice(0, 5).join(', ')}.`;
+	}
+	if (result.unavailable.length > 0) {
+		const names = result.unavailable.map((kind) => LOOKUP_NAMES[kind]).join(', ');
+		summary += ` The API user may not read ${names}, so those properties were left as they are.`;
 	}
 	if (!result.complete) {
 		summary += ' The document list was incomplete, so removed documents were not checked.';
 	}
 	return summary;
+}
+
+/** Identifies the problems of a sync result; empty if there are none. */
+function problemKey(result: SyncResult): string {
+	const ids = result.failures.map((failure) => failure.documentId);
+	if (
+		ids.length === 0 &&
+		result.duplicateIds.length === 0 &&
+		result.unavailable.length === 0 &&
+		result.complete
+	) {
+		return '';
+	}
+	return JSON.stringify([ids, result.duplicateIds, result.unavailable, result.complete]);
 }
 
 function count(value: number, noun: string): string {
