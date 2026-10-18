@@ -53,6 +53,16 @@ export class ObsidianVault implements VaultPort {
 		);
 	}
 
+	async updateText(path: string, update: (text: string) => string): Promise<boolean> {
+		const file = this.app.vault.getFileByPath(path);
+		if (file === null) throw new Error(`Note not found: ${path}`);
+		// Most syncs change nothing, so the file is only written if the text differs.
+		const current = await this.app.vault.cachedRead(file);
+		if (update(current) === current) return false;
+		await this.app.vault.process(file, update);
+		return true;
+	}
+
 	private async readProperties(file: TFile): Promise<Record<string, unknown> | null> {
 		const cache = this.app.metadataCache.getFileCache(file);
 		if (cache !== null) return cache.frontmatter ?? null;

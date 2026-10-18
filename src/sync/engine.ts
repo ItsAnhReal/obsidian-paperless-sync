@@ -1,5 +1,6 @@
 import type { PaperlessClient } from '../paperless/client';
 import type { LookupKind, Lookups, PaperlessDocument, ServerInfo } from '../paperless/types';
+import { applyContentSection, contentTagIds, renderContentSection } from './content';
 import {
 	buildNotePath,
 	renderTemplate,
@@ -33,6 +34,8 @@ export interface VaultPort {
 		path: string,
 		update: (properties: Record<string, unknown>) => void,
 	): Promise<void>;
+	/** Changes the note's text, frontmatter included. Resolves to false if nothing changed. */
+	updateText(path: string, update: (text: string) => string): Promise<boolean>;
 }
 
 export interface SyncOptions {
@@ -43,6 +46,11 @@ export interface SyncOptions {
 	linkBaseUrl: string;
 	linkMetadata: boolean;
 	includeCustomFields: boolean;
+	/**
+	 * Documents with this tag get their text in a managed section of their note, which is
+	 * kept up to date and removed when the tag is. Empty turns this off.
+	 */
+	contentTag: string;
 }
 
 export interface SyncFailure {
@@ -111,14 +119,26 @@ export async function runSync(
 		unavailable: [...lookups.unavailable].sort(),
 	};
 
-	// The document text only goes into new notes, so it is fetched for those alone.
-	const contents = templateUses(options.noteTemplate, 'content')
-		? await client.fetchContents(
-				listing.documents
-					.filter((document) => !notesById.has(document.id))
-					.map((document) => document.id),
-			)
-		: new Map<number, string>();
+	// Without the setting, note texts are never read. Without the tags list, it is unknown
+	// which documents are opted in, so their sections are left as they are.
+	const tagIds =
+		options.contentTag.trim() === '' ? null : contentTagIds(options.contentTag, lookups);
+	const hasContentTag = (document: PaperlessDocument): boolean =>
+		tagIds !== null && (document.tags ?? []).some((id) => tagIds.has(id));
+
+	// The text is fetched for opted-in documents and, if the note template uses it, for new
+	// notes, because the template is only rendered when a note is created.
+	const templateContent = templateUses(options.noteTemplate, 'content');
+	const contentIds = listing.documents
+		.filter(
+			(document) =>
+				hasContentTag(document) || (templateContent && !notesById.has(document.id)),
+		)
+		.map((document) => document.id);
+	const contents =
+		contentIds.length > 0
+			? await client.fetchContents(contentIds)
+			: new Map<number, string>();
 	const isUnknown = unknownKeys(lookups.unavailable);
 
 	const seen = new Set<number>();
@@ -129,7 +149,8 @@ export async function runSync(
 			const desired = buildProperties(document, lookups, options);
 			if (notes === undefined) {
 				const content = contents.get(document.id) ?? document.content;
-				await createNote(vault, { ...document, content }, lookups, desired, options);
+				const section = hasContentTag(document) ? renderContentSection(content) : null;
+				await createNote(vault, { ...document, content }, lookups, desired, section, options);
 				result.created++;
 				continue;
 			}
@@ -141,6 +162,17 @@ export async function runSync(
 					applyProperties(properties, desired, isUnknown),
 				);
 				changed = true;
+			}
+			if (tagIds !== null) {
+				const section = hasContentTag(document)
+					? renderContentSection(contents.get(document.id))
+					: null;
+				for (const note of notes) {
+					const textChanged = await vault.updateText(note.path, (text) =>
+						applyContentSection(text, section),
+					);
+					changed ||= textChanged;
+				}
 			}
 			if (changed) result.updated++;
 			else result.unchanged++;
@@ -182,6 +214,7 @@ async function createNote(
 	document: PaperlessDocument,
 	lookups: Lookups,
 	properties: Properties,
+	section: string | null,
 	options: SyncOptions,
 ): Promise<void> {
 	const variables = templateVariables(
@@ -190,7 +223,8 @@ async function createNote(
 		documentUrl(options.linkBaseUrl, document.id),
 	);
 	const rendered = renderTemplate(options.noteTemplate, variables);
-	const body = rendered === '' || rendered.endsWith('\n') ? rendered : `${rendered}\n`;
+	const text = rendered === '' || rendered.endsWith('\n') ? rendered : `${rendered}\n`;
+	const body = applyContentSection(text, section);
 
 	let lastError: unknown = null;
 	for (let attempt = 0; attempt < MAX_NAME_ATTEMPTS; attempt++) {

@@ -47,6 +47,7 @@ export const DEFAULT_OPTIONS: SyncOptions = {
 	linkBaseUrl: SERVER,
 	linkMetadata: false,
 	includeCustomFields: true,
+	contentTag: '',
 };
 
 export interface FakeServerState {
@@ -207,6 +208,16 @@ export class FakeVault implements VaultPort {
 		update(note.properties);
 		this.writes++;
 		return Promise.resolve();
+	}
+
+	updateText(path: string, update: (text: string) => string): Promise<boolean> {
+		const note = this.notes.get(path);
+		if (note === undefined) return Promise.reject(new Error(`No note at ${path}`));
+		const body = update(note.body);
+		if (body === note.body) return Promise.resolve(false);
+		note.body = body;
+		this.writes++;
+		return Promise.resolve(true);
 	}
 
 	move(from: string, to: string): void {

@@ -81,13 +81,18 @@ export class PaperlessSyncSettingTab extends PluginSettingTab {
 					},
 					{
 						name: 'Note text',
-						desc: 'Template for the text of new notes. Supports the file name variables plus {{url}} and {{content}} for the document text. The text of existing notes is never changed.',
+						desc: 'Template for the text of new notes. Supports the file name variables plus {{url}} and {{content}} for the document text. The text of existing notes is never changed, apart from the document text section below.',
 						control: { type: 'textarea', key: 'noteTemplate', rows: 4 },
 					},
 					{
 						name: 'Link correspondents and document types',
 						desc: 'Write them as links, so that each one can have its own note with backlinks to its documents.',
 						control: { type: 'toggle', key: 'linkMetadata' },
+					},
+					{
+						name: 'Document text tag',
+						desc: 'Documents with this Paperless-ngx tag get their text in a collapsed section at the end of their note. The section is updated on every sync and removed when the tag is removed from the document. Leave empty to keep all document text out of your vault.',
+						control: { type: 'text', key: 'contentTag', placeholder: 'obs-sync' },
 					},
 					{
 						name: 'Include custom fields',
