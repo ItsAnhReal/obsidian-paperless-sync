@@ -182,7 +182,7 @@ npm run mock       # mock Paperless-ngx API on http://127.0.0.1:8765, token "dev
 
 Copy `main.js` and `manifest.json` to `<vault>/.obsidian/plugins/paperless-sync/` to try a build. The mock server serves `dev/mock-data.json` and rereads it on every request, so you can edit documents while Obsidian is running.
 
-Bug reports and pull requests are welcome.
+Bug reports and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to get started.
 
 ## 📜 License
 
