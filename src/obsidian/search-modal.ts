@@ -1,12 +1,10 @@
 import { SuggestModal, type App, type TFile } from 'obsidian';
 import type { PaperlessClient } from '../paperless/client';
 import type { Lookups, SearchHit } from '../paperless/types';
-import { buildTagFilter, type TagFilterOptions } from '../sync/filter';
+import { buildTagFilter, tagFilterIds, type TagFilterOptions } from '../sync/filter';
 import { toDate } from '../sync/properties';
 
 const SEARCH_LIMIT = 20;
-/** More hits than shown are fetched, because the tag filters may leave some out. */
-const FETCH_LIMIT = 50;
 const DEBOUNCE_MS = 300;
 const MIN_QUERY_LENGTH = 2;
 
@@ -59,14 +57,16 @@ export class PaperlessSearchModal extends SuggestModal<SearchItem> {
 			const client = this.getClient();
 			this.lookups ??= client.connect().then(() => client.fetchLookups(false));
 			const lookups = await this.lookups;
-			const isSynced = buildTagFilter(this.context.filterOptions(), lookups);
-			const hits = await client.search(trimmed, FETCH_LIMIT);
+			const filterOptions = this.context.filterOptions();
+			const isSynced = buildTagFilter(filterOptions, lookups);
+			const tags = tagFilterIds(filterOptions, lookups);
+			const hits =
+				tags.anyOf?.length === 0 ? [] : await client.search(trimmed, SEARCH_LIMIT, tags);
 			// A slow answer to an older query must not replace the results of a newer one.
 			if (this.latestQuery !== trimmed) return this.latestItems;
 			this.emptyStateText = 'No documents found.';
 			this.latestItems = hits
 				.filter((hit) => isSynced(hit.tags))
-				.slice(0, SEARCH_LIMIT)
 				.map((hit) => ({
 					hit,
 					correspondent:

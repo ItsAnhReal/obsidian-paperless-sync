@@ -215,4 +215,15 @@ describe('PaperlessClient', () => {
 		expect(documents.map((document) => document.id)).toEqual([2, 3]);
 		expect(documents[0]?.notes).toEqual(notes);
 	});
+
+	it('lets the server apply the tag filters to the search', async () => {
+		const server = createFakeServer();
+		const client = new PaperlessClient(SERVER, TOKEN, server.httpGet);
+		await client.search('miete', 20, { anyOf: [1, 2], noneOf: [3] });
+		await client.search('miete', 20, { noneOf: [] });
+		const [filtered, plain] = server.requests.map((request) => request.url.searchParams);
+		expect(filtered?.get('tags__id__in')).toBe('1,2');
+		expect(filtered?.get('tags__id__none')).toBe('3');
+		expect(plain?.has('tags__id__none')).toBe(false);
+	});
 });

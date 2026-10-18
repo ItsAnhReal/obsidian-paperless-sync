@@ -29,6 +29,21 @@ export function unknownFilterTags(options: TagFilterOptions, lookups: Lookups): 
 	return [...new Set(names)].filter((name) => !known.has(name));
 }
 
+/**
+ * The tag filters as tag IDs, for asking the server. `anyOf` is undefined without an include
+ * filter and empty if no included tag exists, in which case no document matches.
+ */
+export function tagFilterIds(
+	options: TagFilterOptions,
+	lookups: Lookups,
+): { anyOf: number[] | undefined; noneOf: number[] } {
+	const include = parseTagList(options.includeTags);
+	return {
+		anyOf: include.length === 0 ? undefined : [...tagIdsByName(include, lookups.tags)],
+		noneOf: [...tagIdsByName(parseTagList(options.excludeTags), lookups.tags)],
+	};
+}
+
 export interface TagFilterOptions {
 	/** Comma separated tag names. If set, only documents with one of these tags are synced. */
 	includeTags: string;

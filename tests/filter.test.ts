@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildTagFilter, parseTagList, unknownFilterTags } from '../src/sync/filter';
+import { buildTagFilter, parseTagList, tagFilterIds, unknownFilterTags } from '../src/sync/filter';
 import { makeLookups } from './helpers';
 
 const lookups = makeLookups({
@@ -57,5 +57,13 @@ describe('buildTagFilter', () => {
 		const unreadable = makeLookups({ unavailable: new Set(['tags']) });
 		expect(() => buildTagFilter({ includeTags: '', excludeTags: 'privat' }, unreadable)).toThrow(/tags/);
 		expect(buildTagFilter({ includeTags: '', excludeTags: '' }, unreadable)([1])).toBe(true);
+	});
+});
+
+describe('tagFilterIds', () => {
+	it('maps the filters to tag IDs', () => {
+		expect(tagFilterIds({ includeTags: '', excludeTags: 'privat' }, lookups)).toEqual({ anyOf: undefined, noneOf: [1] });
+		expect(tagFilterIds({ includeTags: 'Steuer, x', excludeTags: '' }, lookups)).toEqual({ anyOf: [2], noneOf: [] });
+		expect(tagFilterIds({ includeTags: 'x', excludeTags: '' }, lookups)).toEqual({ anyOf: [], noneOf: [] });
 	});
 });

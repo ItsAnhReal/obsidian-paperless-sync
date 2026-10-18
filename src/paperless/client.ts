@@ -62,6 +62,13 @@ const DOCUMENT_FIELDS = [
 
 const SEARCH_FIELDS = 'id,title,created,correspondent,tags';
 
+export interface SearchTagFilter {
+	/** Only documents with at least one of these tags. Must not be empty. */
+	anyOf?: readonly number[];
+	/** No documents with any of these tags. */
+	noneOf?: readonly number[];
+}
+
 export interface DocumentListOptions {
 	includeCustomFields: boolean;
 	includeNotes: boolean;
@@ -144,14 +151,22 @@ export class PaperlessClient {
 		return documents.sort((a, b) => a.id - b.id);
 	}
 
-	/** Runs the Paperless-ngx full text search and returns the best matches. */
-	async search(query: string, limit: number): Promise<SearchHit[]> {
-		const { body } = await this.get<Paginated<SearchHit>>('/api/documents/', {
+	/**
+	 * Runs the Paperless-ngx full text search and returns the best matches. The tag filters
+	 * are applied by the server, so excluded documents never take up the result list.
+	 */
+	async search(query: string, limit: number, tags: SearchTagFilter = {}): Promise<SearchHit[]> {
+		const params: Record<string, string> = {
 			query,
 			page: '1',
 			page_size: String(limit),
 			fields: SEARCH_FIELDS,
-		});
+		};
+		if (tags.anyOf !== undefined) params.tags__id__in = tags.anyOf.join(',');
+		if (tags.noneOf !== undefined && tags.noneOf.length > 0) {
+			params.tags__id__none = tags.noneOf.join(',');
+		}
+		const { body } = await this.get<Paginated<SearchHit>>('/api/documents/', params);
 		return body.results;
 	}
 

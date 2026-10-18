@@ -215,7 +215,13 @@ export default class PaperlessSyncPlugin extends Plugin {
 		// A manual sync reports why no note was created, for example a tag filter.
 		const result = await this.sync(true, { ids: [id] });
 		const path = result?.createdPaths[0];
-		return (path === undefined ? null : this.app.vault.getFileByPath(path)) ?? this.findNote(id);
+		const created = path === undefined ? null : this.app.vault.getFileByPath(path);
+		if (created !== null) return created;
+		// Right after startup a note may not be indexed yet, so findNote misses it. Reading
+		// the notes from disk finds it, like the sync did.
+		const notes = await new ObsidianVault(this.app).listDocumentNotes();
+		const note = notes.find((candidate) => readDocumentId(candidate.properties) === id);
+		return note === undefined ? null : this.app.vault.getFileByPath(note.path);
 	}
 
 	/** The note of a document, preferring one that is not flagged as removed. */
