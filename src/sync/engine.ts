@@ -1,7 +1,7 @@
 import type { PaperlessClient } from '../paperless/client';
 import type { LookupKind, Lookups, PaperlessDocument, ServerInfo } from '../paperless/types';
 import { applyContentSection, contentTagIds, renderContentSection } from './content';
-import { buildTagFilter } from './filter';
+import { buildTagFilter, unknownFilterTags } from './filter';
 import { applyNotesSection, renderNotesSection } from './notes';
 import {
 	buildNotePath,
@@ -81,6 +81,8 @@ export interface SyncResult {
 	unchanged: number;
 	/** Documents left out by the tag filters. Their notes are neither updated nor flagged. */
 	excluded: number;
+	/** Names in the tag filters that match no tag in Paperless-ngx. */
+	unknownFilterTags: string[];
 	/** Notes newly flagged because their document is no longer on the server. */
 	missing: number;
 	/** Documents that have more than one note. */
@@ -139,6 +141,7 @@ export async function runSync(
 		updated: 0,
 		unchanged: 0,
 		excluded: 0,
+		unknownFilterTags: unknownFilterTags(options, lookups),
 		missing: 0,
 		duplicateIds: [],
 		failures: [],
@@ -178,9 +181,10 @@ export async function runSync(
 			continue;
 		}
 		const notes = notesById.get(document.id);
-		// Without the notes field, for example on an old server, sections are left as they are.
-		const syncNotes = options.includeNotes && document.notes !== undefined;
-		const notesSection = syncNotes ? renderNotesSection(document.notes ?? []) : null;
+		// Turned off, notes sections are removed. Without the notes field, for example on an
+		// old server, they are left as they are.
+		const syncNotes = !options.includeNotes || document.notes !== undefined;
+		const notesSection = options.includeNotes ? renderNotesSection(document.notes ?? []) : null;
 		try {
 			const desired = buildProperties(document, lookups, options);
 			if (notes === undefined) {
@@ -207,6 +211,7 @@ export async function runSync(
 				);
 				changed = true;
 			}
+			// Reading every note is cheap: a note is only written if its text changes.
 			if (tagIds !== null || syncNotes) {
 				const contentSection = hasContentTag(document)
 					? renderContentSection(contents.get(document.id))

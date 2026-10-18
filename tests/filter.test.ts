@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildTagFilter, parseTagList } from '../src/sync/filter';
+import { buildTagFilter, parseTagList, unknownFilterTags } from '../src/sync/filter';
 import { makeLookups } from './helpers';
 
 const lookups = makeLookups({
@@ -14,6 +14,16 @@ describe('parseTagList', () => {
 	it('splits, trims and lower-cases tag names', () => {
 		expect(parseTagList(' Privat, #Steuer ,,')).toEqual(['privat', 'steuer']);
 		expect(parseTagList('')).toEqual([]);
+	});
+});
+
+describe('unknownFilterTags', () => {
+	it('names filter tags that do not exist', () => {
+		expect(unknownFilterTags({ includeTags: 'Steuer, Stuer', excludeTags: 'privat, geheim' }, lookups)).toEqual([
+			'stuer',
+			'geheim',
+		]);
+		expect(unknownFilterTags({ includeTags: 'x', excludeTags: '' }, makeLookups({ unavailable: new Set(['tags']) }))).toEqual([]);
 	});
 });
 

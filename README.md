@@ -123,7 +123,7 @@ flowchart LR
 | Note text | Template for the text of new notes. |
 | Link correspondents and document types | Writes them as `[[links]]`, so each can have its own note with backlinks. |
 | Document text tag | Documents with this tag get their text in a collapsed section of their note. Empty by default, which keeps all document text out of the vault. |
-| Include Paperless-ngx notes | Keeps the notes written on each document in Paperless-ngx in a collapsed section of its note. Off by default. |
+| Include Paperless-ngx notes | Keeps the notes written on each document in Paperless-ngx in a collapsed section of its note. Off by default; turning it off removes the sections again. |
 | Include custom fields | Adds custom fields as `paperless_field_<name>` properties. |
 | Only documents with these tags | Comma separated tags. If set, only documents with one of them get a note. |
 | Skip documents with these tags | Comma separated tags. Documents with one of them get no note, and existing notes are no longer updated. |
@@ -179,7 +179,7 @@ Most paperwork doesn't belong in a vault that is synced to the cloud or read by 
 
 By default every document gets a note. Use **Only documents with these tags** to sync a selection, for example `Steuer, Wohnung`, and **Skip documents with these tags** to keep some out, for example `private`. A document with a skipped tag is never synced, even if it also has an included tag. Search hides skipped documents too.
 
-Notes that already exist for a skipped document stay where they are. They are no longer updated and are not flagged as removed. If the API user may not read tags, the sync stops instead of guessing.
+Notes that already exist for a skipped document stay where they are. They are no longer updated and are not flagged as removed. If a filter names a tag that doesn't exist in Paperless-ngx, the sync result says so. If the API user may not read tags, the sync stops instead of guessing.
 
 ## 💬 Paperless-ngx notes
 
@@ -193,7 +193,7 @@ Turn on **Include Paperless-ngx notes** and the notes written on a document in P
 %% paperless-notes end %%
 ```
 
-Like the document text section, it is updated on every sync and removed when the document has no notes left. Turning the setting off leaves existing sections as they are.
+It is updated on every sync and removed when the document has no notes left. Turning the setting off removes the sections from all notes on the next sync.
 
 ## 💡 Good to know
 

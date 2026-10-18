@@ -96,7 +96,7 @@ export class PaperlessSyncSettingTab extends PluginSettingTab {
 					},
 					{
 						name: 'Include Paperless-ngx notes',
-						desc: 'Keep the notes written on each document in Paperless-ngx in a collapsed section of its note. The section is updated on every sync.',
+						desc: 'Keep the notes written on each document in Paperless-ngx in a collapsed section of its note. The section is updated on every sync. Turning this off removes the sections again.',
 						control: { type: 'toggle', key: 'includeNotes' },
 					},
 					{

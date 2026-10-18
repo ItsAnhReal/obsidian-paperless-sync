@@ -349,6 +349,9 @@ function summarize(result: SyncResult): string {
 		parts.push(`${result.missing} no longer in Paperless-ngx`);
 	}
 	let summary = `Paperless sync: ${parts.join(', ')}.`;
+	if (result.unknownFilterTags.length > 0) {
+		summary += ` The tag filters name tags that do not exist in Paperless-ngx: ${result.unknownFilterTags.join(', ')}.`;
+	}
 	if (result.missing > 0) {
 		summary += ' Run "Show notes of removed documents" to review them.';
 	}
@@ -377,12 +380,19 @@ function problemKey(result: SyncResult): string {
 	if (
 		ids.length === 0 &&
 		result.duplicateIds.length === 0 &&
+		result.unknownFilterTags.length === 0 &&
 		result.unavailable.length === 0 &&
 		result.complete
 	) {
 		return '';
 	}
-	return JSON.stringify([ids, result.duplicateIds, result.unavailable, result.complete]);
+	return JSON.stringify([
+		ids,
+		result.duplicateIds,
+		result.unavailable,
+		result.complete,
+		result.unknownFilterTags,
+	]);
 }
 
 function count(value: number, noun: string): string {

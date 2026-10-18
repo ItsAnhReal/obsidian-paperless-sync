@@ -18,6 +18,17 @@ export function tagIdsByName(names: readonly string[], tags: Map<number, string>
 	return ids;
 }
 
+/**
+ * Names in the tag filters that match no Paperless-ngx tag, as written. Usually a typo, which
+ * would otherwise make an include filter skip everything without saying why.
+ */
+export function unknownFilterTags(options: TagFilterOptions, lookups: Lookups): string[] {
+	if (lookups.unavailable.has('tags')) return [];
+	const known = new Set([...lookups.tags.values()].map((name) => name.trim().toLowerCase()));
+	const names = [...parseTagList(options.includeTags), ...parseTagList(options.excludeTags)];
+	return [...new Set(names)].filter((name) => !known.has(name));
+}
+
 export interface TagFilterOptions {
 	/** Comma separated tag names. If set, only documents with one of these tags are synced. */
 	includeTags: string;

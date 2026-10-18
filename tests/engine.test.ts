@@ -326,6 +326,7 @@ describe('runSync', () => {
 		expect(vault.get('Paperless/2024-02-01 Stromrechnung.md').properties.paperless_tags).toBeUndefined();
 
 		expect(await sync({ includeTags: 'Wohnung' })).toMatchObject({ created: 0, excluded: 2, unchanged: 1 });
+		expect((await sync({ includeTags: 'Wohnung, Wohnnug' })).unknownFilterTags).toEqual(['wohnnug']);
 	});
 
 	it('fails instead of guessing when a tag filter is set but tags cannot be read', async () => {
@@ -352,13 +353,13 @@ describe('runSync', () => {
 		expect(await sync({ includeNotes: true })).toMatchObject({ updated: 1 });
 		expect(vault.get(path).body).toBe('[Open in Paperless](https://paperless.test/documents/1/details)\n');
 
-		// Turned off, sections are left as they are and notes are not requested.
+		// Turned off, notes are not requested and existing sections are removed.
 		server.state.documents = [makeDocument({ id: 1, title: 'Mietvertrag', notes: [note] })];
 		await sync({ includeNotes: true });
-		const body = vault.get(path).body;
-		server.state.documents = [makeDocument({ id: 1, title: 'Mietvertrag', notes: [] })];
-		await sync();
-		expect(vault.get(path).body).toBe(body);
+		expect(vault.get(path).body).toContain('> Kaution gezahlt');
+		expect(await sync()).toMatchObject({ updated: 1 });
+		expect(server.requests.at(-1)?.url.searchParams.get('fields')).not.toMatch(/notes/);
+		expect(vault.get(path).body).toBe('[Open in Paperless](https://paperless.test/documents/1/details)\n');
 	});
 
 	it('syncs only the documents in the scope', async () => {
