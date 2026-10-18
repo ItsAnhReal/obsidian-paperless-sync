@@ -77,7 +77,7 @@ describe('PaperlessClient', () => {
 		expect(params?.get('ordering')).toBe('id');
 		expect(params?.get('page_size')).toBe('100');
 		expect(params?.get('fields')).toBe(
-			'id,title,correspondent,document_type,storage_path,tags,created,added,archive_serial_number',
+			'id,title,correspondent,document_type,storage_path,tags,created,added,modified,archive_serial_number',
 		);
 	});
 

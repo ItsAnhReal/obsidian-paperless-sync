@@ -211,6 +211,12 @@ export class FakeVault implements VaultPort {
 		return Promise.resolve();
 	}
 
+	readText(path: string): Promise<string> {
+		const note = this.notes.get(path);
+		if (note === undefined) return Promise.reject(new Error(`No note at ${path}`));
+		return Promise.resolve(note.body);
+	}
+
 	updateText(path: string, update: (text: string) => string): Promise<boolean> {
 		const note = this.notes.get(path);
 		if (note === undefined) return Promise.reject(new Error(`No note at ${path}`));

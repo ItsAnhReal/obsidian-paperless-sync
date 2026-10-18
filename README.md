@@ -151,17 +151,16 @@ Most paperwork doesn't belong in a vault that is synced to the cloud or read by 
 Those notes get a collapsed section at the end:
 
 ```markdown
-%% paperless-content start %%
+%% paperless-content start 2024-03-16T09:30:00.000000+01:00 %%
 > [!quote]- Document text
 > Your payment for March 2024 is EUR 84.50.
 %% paperless-content end %%
 ```
 
-- The section is updated on every sync, so edits inside it are replaced. Write your own notes above or below it.
-- When a document no longer qualifies, for example because you removed its tag, the next sync removes the section from its note.
-- Text is only downloaded for documents that qualify.
-- In the tagged mode, if the API user may not read tags, existing sections are left as they are.
-- **Do not sync** stops the plugin from touching note text. Sections that already exist stay. To remove them, switch to the tagged mode with a tag no document has, sync once, then switch it off.
+- The section is replaced when the document changes in Paperless-ngx, so edits inside it are lost. Write your own notes above or below it.
+- Text is only downloaded for documents that qualify, and only again after they changed. The start line remembers which version the section holds.
+- When a document no longer qualifies, for example because you removed its tag, the next sync removes the section from its note. Switching to **Do not sync** removes all sections.
+- In the tagged mode, note texts are left as they are while the tag field is empty or the API user may not read tags.
 
 ## 💡 Good to know
 

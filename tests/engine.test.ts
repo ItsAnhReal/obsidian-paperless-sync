@@ -228,23 +228,58 @@ describe('runSync', () => {
 		);
 	});
 
-	it('syncs the text of all documents in the all mode and leaves notes alone when off', async () => {
+	it('syncs the text of all documents in the all mode and removes it when off', async () => {
 		const { server, vault, sync } = setup();
 		server.state.documents = [
 			makeDocument({ id: 1, title: 'Brief', content: 'Hallo' }),
 			makeDocument({ id: 2, title: 'Leer', content: '' }),
 		];
 		await sync({ contentMode: 'all', contentTag: 'ignored' });
-		expect(vault.get('Paperless/2024-01-15 Brief.md').body).toContain('> Hallo');
+		const brief = 'Paperless/2024-01-15 Brief.md';
+		expect(vault.get(brief).body).toContain('> Hallo');
 		expect(vault.get('Paperless/2024-01-15 Leer.md').body).not.toContain(CONTENT_START);
 
+		expect(await sync({ contentMode: 'off' })).toMatchObject({ updated: 1, unchanged: 1 });
+		expect(vault.get(brief).body).toBe('[Open in Paperless](https://paperless.test/documents/1/details)\n');
 		const writes = vault.writes;
 		expect(await sync({ contentMode: 'off' })).toMatchObject({ updated: 0, unchanged: 2 });
 		expect(vault.writes).toBe(writes);
-		expect(vault.get('Paperless/2024-01-15 Brief.md').body).toContain('> Hallo');
+	});
 
-		expect(await sync({ contentMode: 'tagged', contentTag: 'obs-sync' })).toMatchObject({ updated: 1 });
-		expect(vault.get('Paperless/2024-01-15 Brief.md').body).not.toContain(CONTENT_START);
+	it('downloads the text again only when the document changed', async () => {
+		const { server, vault, sync } = setup();
+		server.state.documents = [
+			makeDocument({ id: 1, title: 'Brief', content: 'Hallo', modified: '2024-01-16T10:00:00Z' }),
+			makeDocument({ id: 2, title: 'Notiz', content: 'Text', modified: '2024-01-16T10:00:00Z' }),
+		];
+		const textRequests = (): (string | null)[] =>
+			server.requests
+				.filter((request) => request.url.searchParams.get('fields')?.includes('content'))
+				.map((request) => request.url.searchParams.get('id__in'));
+		await sync({ contentMode: 'all' });
+		expect(textRequests()).toEqual(['1,2']);
+
+		server.requests.length = 0;
+		const writes = vault.writes;
+		expect(await sync({ contentMode: 'all' })).toMatchObject({ updated: 0, unchanged: 2 });
+		expect(textRequests()).toEqual([]);
+		expect(vault.writes).toBe(writes);
+
+		server.requests.length = 0;
+		server.state.documents[0] = makeDocument({ id: 1, title: 'Brief', content: 'Neu', modified: '2024-02-01T08:00:00Z' });
+		expect(await sync({ contentMode: 'all' })).toMatchObject({ updated: 1, unchanged: 1 });
+		expect(textRequests()).toEqual(['1']);
+		expect(vault.get('Paperless/2024-01-15 Brief.md').body).toContain('> Neu');
+	});
+
+	it('leaves document text sections alone in the tagged mode without a tag', async () => {
+		const { server, vault, sync } = setup();
+		server.state.documents = [makeDocument({ id: 1, title: 'Brief', content: 'Text' })];
+		await sync({ contentMode: 'all' });
+		const body = vault.get('Paperless/2024-01-15 Brief.md').body;
+
+		expect(await sync({ contentMode: 'tagged', contentTag: ' ' })).toMatchObject({ updated: 0 });
+		expect(vault.get('Paperless/2024-01-15 Brief.md').body).toBe(body);
 	});
 
 	it('leaves document text sections alone when the tags cannot be read', async () => {

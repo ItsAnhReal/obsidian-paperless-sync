@@ -91,7 +91,7 @@ export class PaperlessSyncSettingTab extends PluginSettingTab {
 					},
 					{
 						name: 'Document text',
-						desc: 'Put the text of documents in a collapsed section at the end of their note. The section is updated on every sync and removed when a document no longer qualifies. Keep in mind that the text then is wherever your vault is synced or read.',
+						desc: 'Put the text of documents in a collapsed section at the end of their note. The section is updated when the document changes and removed when it no longer qualifies, so "Do not sync" removes all sections. Keep in mind that the text then is wherever your vault is synced or read.',
 						control: {
 							type: 'dropdown',
 							key: 'contentMode',
@@ -104,7 +104,7 @@ export class PaperlessSyncSettingTab extends PluginSettingTab {
 					},
 					{
 						name: 'Document text tag',
-						desc: 'The Paperless-ngx tag that selects documents when "Document text" is set to tagged documents only.',
+						desc: 'The Paperless-ngx tag that selects documents when "Document text" is set to tagged documents only. While it is empty, note texts are left as they are.',
 						control: { type: 'text', key: 'contentTag', placeholder: 'obs-sync' },
 					},
 					{
