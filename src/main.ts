@@ -305,6 +305,7 @@ export default class PaperlessSyncPlugin extends Plugin {
 			linkBaseUrl: this.linkBaseUrl(),
 			linkMetadata: this.settings.linkMetadata,
 			includeCustomFields: this.settings.includeCustomFields,
+			contentMode: this.settings.contentMode,
 			contentTag: this.settings.contentTag,
 			includeNotes: this.settings.includeNotes,
 			includeTags: this.settings.includeTags,

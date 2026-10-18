@@ -41,6 +41,12 @@ describe('applyNotesSection', () => {
 		expect(applyNotesSection(withNotes, null)).toBe(text);
 	});
 
+	it('goes in front of a document text section that carries a modification time', () => {
+		const stamped = renderContentSection('Text', '2024-03-16T09:30:00+01:00') ?? '';
+		const text = applyContentSection('Mine\n', stamped);
+		expect(applyNotesSection(text, notes)).toBe(`Mine\n\n${notes}\n\n${stamped}\n`);
+	});
+
 	it('goes at the end without a document text section', () => {
 		expect(applyNotesSection('Mine\n', notes)).toBe(`Mine\n\n${notes}\n`);
 		expect(applyNotesSection(`Mine\n\n${notes}\n`, null)).toBe('Mine\n');

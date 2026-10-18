@@ -53,6 +53,12 @@ export class ObsidianVault implements VaultPort {
 		);
 	}
 
+	async readText(path: string): Promise<string> {
+		const file = this.app.vault.getFileByPath(path);
+		if (file === null) throw new Error(`Note not found: ${path}`);
+		return this.app.vault.cachedRead(file);
+	}
+
 	async updateText(path: string, update: (text: string) => string): Promise<boolean> {
 		const file = this.app.vault.getFileByPath(path);
 		if (file === null) throw new Error(`Note not found: ${path}`);

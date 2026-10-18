@@ -1,5 +1,5 @@
 import type { PaperlessNote } from '../paperless/types';
-import { CONTENT_START } from './content';
+import { CONTENT_START_LINE } from './content';
 import { applySection, quoteLines, type SectionMarkers } from './sections';
 import { toDate } from './properties';
 
@@ -34,7 +34,7 @@ export function renderNotesSection(notes: readonly PaperlessNote[]): string | nu
 
 /** Like `applyContentSection`. A new notes section goes in front of the document text. */
 export function applyNotesSection(text: string, section: string | null): string {
-	return applySection(text, NOTES_MARKERS, section, CONTENT_START);
+	return applySection(text, NOTES_MARKERS, section, CONTENT_START_LINE);
 }
 
 function userName(user: PaperlessNote['user']): string | undefined {

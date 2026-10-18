@@ -22,4 +22,15 @@ describe('normalizeSettings', () => {
 		});
 		expect(settings).toEqual(DEFAULT_SETTINGS);
 	});
+
+	it('keeps a valid document text mode and replaces an unknown one', () => {
+		expect(normalizeSettings({ contentMode: 'all' }).contentMode).toBe('all');
+		expect(normalizeSettings({ contentMode: 'some' }).contentMode).toBe('off');
+	});
+
+	it('turns a tag set in version 0.1.0 into the tagged mode', () => {
+		expect(normalizeSettings({ contentTag: 'obs-sync' })).toMatchObject({ contentMode: 'tagged', contentTag: 'obs-sync' });
+		expect(normalizeSettings({ contentTag: '' }).contentMode).toBe('off');
+		expect(normalizeSettings({ contentMode: 'off', contentTag: 'obs-sync' }).contentMode).toBe('off');
+	});
 });

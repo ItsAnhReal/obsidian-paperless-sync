@@ -4,8 +4,16 @@
  * comments in reading view.
  */
 export interface SectionMarkers {
-	start: string;
+	/** The start line, or a pattern for start lines that carry a value. */
+	start: string | RegExp;
 	end: string;
+	/** How the start line is named in errors. Defaults to `start` if that is a string. */
+	label?: string;
+}
+
+/** Whether the line is a start line of the section. */
+export function isStartLine(line: string, start: string | RegExp): boolean {
+	return typeof start === 'string' ? line === start : start.test(line);
 }
 
 /**
@@ -18,13 +26,13 @@ export function applySection(
 	text: string,
 	markers: SectionMarkers,
 	section: string | null,
-	before?: string,
+	before?: string | RegExp,
 ): string {
 	const lines = text.split('\n');
-	const start = lines.indexOf(markers.start);
+	const start = lines.findIndex((line) => isStartLine(line, markers.start));
 	if (start === -1) {
 		if (section === null) return text;
-		const at = before === undefined ? -1 : lines.indexOf(before);
+		const at = before === undefined ? -1 : lines.findIndex((line) => isStartLine(line, before));
 		if (at !== -1) {
 			const head = lines.slice(0, at).join('\n').replace(/\n+$/, '');
 			const tail = lines.slice(at).join('\n');
@@ -36,7 +44,7 @@ export function applySection(
 	const end = lines.indexOf(markers.end, start + 1);
 	if (end === -1) {
 		throw new Error(
-			`The note has "${markers.start}" without "${markers.end}". Remove that section and sync again.`,
+			`The note has "${markers.label ?? String(markers.start)}" without "${markers.end}". Remove that section and sync again.`,
 		);
 	}
 	if (section !== null) {

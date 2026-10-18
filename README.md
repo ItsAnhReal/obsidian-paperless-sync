@@ -50,7 +50,7 @@ Write anything you like below. The plugin never touches it.
 | 🔗 **Links, not copies** | Each note links to the original in Paperless-ngx. Turn on *link metadata* and correspondents and document types become `[[links]]` with their own backlinks. |
 | 🔍 **Query your paperwork** | Filter and sort with Bases, Dataview or plain search, like any other note. |
 | ✍️ **Your notes stay yours** | Only the `paperless_*` properties are managed. Text you write and properties you add are never overwritten. |
-| 🔐 **Text only when you say so** | Document text stays in Paperless-ngx. Tag the few documents you want in your vault, and only those get their text. |
+| 🔐 **Text only when you say so** | Document text stays in Paperless-ngx by default. Bring it in for tagged documents only, or for all of them. |
 | 🚚 **Move and rename freely** | Notes are matched by `paperless_id`, not by path. Reorganize your vault however you want. |
 | 🛡️ **Read-only and safe** | Only `GET` requests. Nothing in Paperless-ngx is ever changed, and no note is ever deleted. |
 | 🤫 **Quiet by design** | A sync that finds nothing new writes nothing, so iCloud, Obsidian Sync and git stay calm. |
@@ -122,7 +122,8 @@ flowchart LR
 | File name | Template for new notes. Default: `{{created}} {{title}}`. Use `/` for subfolders. |
 | Note text | Template for the text of new notes. |
 | Link correspondents and document types | Writes them as `[[links]]`, so each can have its own note with backlinks. |
-| Document text tag | Documents with this tag get their text in a collapsed section of their note. Empty by default, which keeps all document text out of the vault. |
+| Document text | Which documents get their text in a collapsed section of their note: none (default), only those with the document text tag, or all. |
+| Document text tag | The tag that selects documents when **Document text** is set to tagged documents only, for example `obs-sync`. |
 | Include Paperless-ngx notes | Keeps the notes written on each document in Paperless-ngx in a collapsed section of its note. Off by default; turning it off removes the sections again. |
 | Include custom fields | Adds custom fields as `paperless_field_<name>` properties. |
 | Only documents with these tags | Comma separated tags. If set, only documents with one of them get a note. |
@@ -158,22 +159,27 @@ Example: `{{created_year}}/{{correspondent}}/{{created}} {{title}}` sorts notes 
 
 Give the ones you use often a hotkey under **Settings → Hotkeys**.
 
-## 📝 Document text for selected documents
+## 📝 Document text in your notes
 
-Most paperwork doesn't belong in a vault that is synced to the cloud or read by other tools. So document text stays out unless you opt in per document: set **Document text tag**, for example to `obs-sync`, and give that tag to the documents you want in Paperless-ngx. Their notes get a collapsed section at the end:
+Most paperwork doesn't belong in a vault that is synced to the cloud or read by other tools. So document text stays out unless you choose otherwise under **Document text**:
+
+- **Do not sync** (default): no document text reaches the vault.
+- **Only documents with the tag below**: set **Document text tag**, for example to `obs-sync`, and give that tag to the documents you want in Paperless-ngx.
+- **All documents**: every note gets its document's text.
+
+Those notes get a collapsed section at the end:
 
 ```markdown
-%% paperless-content start %%
+%% paperless-content start 2024-03-16T09:30:00.000000+01:00 %%
 > [!quote]- Document text
 > Your payment for March 2024 is EUR 84.50.
 %% paperless-content end %%
 ```
 
-- The section is updated on every sync, so edits inside it are replaced. Write your own notes above or below it.
-- Remove the tag from a document and the next sync removes the section from its note.
-- Only tagged documents have their text downloaded.
-- If the API user may not read tags, existing sections are left as they are.
-- Clearing the setting stops the plugin from touching note text. Sections that already exist stay, so remove the tag from those documents first if you want them gone.
+- The section is replaced when the document changes in Paperless-ngx, so edits inside it are lost. Write your own notes above or below it.
+- Text is only downloaded for documents that qualify, and only again after they changed. The start line remembers which version the section holds.
+- When a document no longer qualifies, for example because you removed its tag, the next sync removes the section from its note. Switching to **Do not sync** removes all sections.
+- In the tagged mode, note texts are left as they are while the tag field is empty or the API user may not read tags.
 
 ## 🏷️ Choosing what syncs
 
@@ -202,13 +208,13 @@ It is updated on every sync and removed when the document has no notes left. Tur
 **Limitations**
 
 - File names are set when a note is created. If a title changes later, `paperless_title` is updated but the file keeps its name.
-- `{{content}}` in the note template is filled in once, when the note is created. Use the document text tag for text that stays up to date.
+- `{{content}}` in the note template is filled in once, when the note is created. Use the **Document text** setting for text that stays up to date.
 - Links in the note text, such as the default `[Open in Paperless]({{url}})`, are not rewritten when the server address changes. `paperless_url` always has the current link.
 - Document links in custom fields are written as document IDs.
 
 ## 🔒 Privacy
 
-The plugin talks to exactly one server: the Paperless-ngx instance you configure. It reads document metadata and, for documents you opt in, their text. It contacts no other service and collects no telemetry.
+The plugin talks to exactly one server: the Paperless-ngx instance you configure. It reads document metadata and, if you turn it on, document text. It contacts no other service and collects no telemetry.
 
 ## 🛠️ Development
 
