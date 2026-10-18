@@ -11,6 +11,8 @@ export interface PaperlessSyncSettings {
 	syncIntervalMinutes: number;
 	/** Base URL for document links, if it differs from the server URL. */
 	linkBaseUrl: string;
+	/** Tag that opts a document into syncing its text into the note. Empty turns it off. */
+	contentTag: string;
 }
 
 export const DEFAULT_SETTINGS: PaperlessSyncSettings = {
@@ -23,6 +25,7 @@ export const DEFAULT_SETTINGS: PaperlessSyncSettings = {
 	includeCustomFields: true,
 	syncIntervalMinutes: 60,
 	linkBaseUrl: '',
+	contentTag: '',
 };
 
 export const MIN_SYNC_INTERVAL_MINUTES = 5;

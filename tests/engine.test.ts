@@ -10,6 +10,7 @@ import {
 	TOKEN,
 	type FakeServer,
 } from './helpers';
+import { renderContentSection } from '../src/sync/content';
 
 function setup(): { server: FakeServer; vault: FakeVault; sync: (options?: Partial<SyncOptions>) => Promise<SyncResult> } {
 	const server = createFakeServer({
@@ -187,6 +188,57 @@ describe('runSync', () => {
 		server.requests.length = 0;
 		await sync({ noteTemplate: '{{content}}' });
 		expect(asksForText()).toBe(false);
+	});
+
+	it('syncs the text of documents with the content tag only, and removes it with the tag', async () => {
+		const { server, vault, sync } = setup();
+		server.state.tags.push({ id: 9, name: 'obs-sync' });
+		server.state.documents = [
+			makeDocument({ id: 1, title: 'Brief', tags: [9], content: 'Sehr geehrte Damen und Herren' }),
+			makeDocument({ id: 2, title: 'Steuer', content: 'Geheim' }),
+		];
+		const options = { contentTag: 'obs-sync' };
+		await sync(options);
+		const brief = 'Paperless/2024-01-15 Brief.md';
+		const steuer = 'Paperless/2024-01-15 Steuer.md';
+		expect(vault.get(brief).body).toBe(
+			'[Open in Paperless](https://paperless.test/documents/1/details)\n\n' +
+				`${renderContentSection('Sehr geehrte Damen und Herren') ?? ''}\n`,
+		);
+		expect(vault.get(steuer).body).not.toContain('Geheim');
+		const textRequests = server.requests.filter((request) =>
+			request.url.searchParams.get('fields')?.includes('content'),
+		);
+		expect(textRequests.map((request) => request.url.searchParams.get('id__in'))).toEqual(['1']);
+
+		const writes = vault.writes;
+		expect(await sync(options)).toMatchObject({ updated: 0, unchanged: 2 });
+		expect(vault.writes).toBe(writes);
+
+		vault.get(brief).body += 'My own notes.\n';
+		server.state.documents[0] = makeDocument({ id: 1, title: 'Brief', tags: [9], content: 'Neuer Text' });
+		expect(await sync(options)).toMatchObject({ updated: 1, unchanged: 1 });
+		expect(vault.get(brief).body).toContain('> Neuer Text');
+		expect(vault.get(brief).body).toContain('My own notes.');
+
+		server.state.documents[0] = makeDocument({ id: 1, title: 'Brief', tags: [], content: 'Neuer Text' });
+		expect(await sync(options)).toMatchObject({ updated: 1 });
+		expect(vault.get(brief).body).toBe(
+			'[Open in Paperless](https://paperless.test/documents/1/details)\nMy own notes.\n',
+		);
+	});
+
+	it('leaves document text sections alone when the tags cannot be read', async () => {
+		const { server, vault, sync } = setup();
+		server.state.tags.push({ id: 9, name: 'obs-sync' });
+		server.state.documents = [makeDocument({ id: 1, title: 'Brief', tags: [9], content: 'Text' })];
+		await sync({ contentTag: 'obs-sync' });
+		const body = vault.get('Paperless/2024-01-15 Brief.md').body;
+		expect(body).toContain('> Text');
+
+		server.state.forbidden = ['/api/tags/'];
+		await sync({ contentTag: 'obs-sync' });
+		expect(vault.get('Paperless/2024-01-15 Brief.md').body).toBe(body);
 	});
 
 	it('does not flag a document that slipped between pages while the list was fetched', async () => {

@@ -173,6 +173,7 @@ export default class PaperlessSyncPlugin extends Plugin {
 				'',
 			linkMetadata: this.settings.linkMetadata,
 			includeCustomFields: this.settings.includeCustomFields,
+			contentTag: this.settings.contentTag,
 		};
 	}
 

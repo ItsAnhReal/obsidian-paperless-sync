@@ -46,6 +46,7 @@ Write anything you like below. The plugin never touches it.
 | 🔗 **Links, not copies** | Each note links to the original in Paperless-ngx. Turn on *link metadata* and correspondents and document types become `[[links]]` with their own backlinks. |
 | 🔍 **Query your paperwork** | Filter and sort with Bases, Dataview or plain search, like any other note. |
 | ✍️ **Your notes stay yours** | Only the `paperless_*` properties are managed. Text you write and properties you add are never overwritten. |
+| 🔐 **Text only when you say so** | Document text stays in Paperless-ngx. Tag the few documents you want in your vault, and only those get their text. |
 | 🚚 **Move and rename freely** | Notes are matched by `paperless_id`, not by path. Reorganize your vault however you want. |
 | 🛡️ **Read-only and safe** | Only `GET` requests. Nothing in Paperless-ngx is ever changed, and no note is ever deleted. |
 | 🤫 **Quiet by design** | A sync that finds nothing new writes nothing, so iCloud, Obsidian Sync and git stay calm. |
@@ -84,7 +85,7 @@ flowchart LR
 ```
 
 - **New document** → a new note is created from your file name and note templates.
-- **Changed document** → only the `paperless_*` properties are updated.
+- **Changed document** → only the `paperless_*` properties are updated, plus the document text section if you [opted the document in](#-document-text-for-selected-documents).
 - **Deleted document** → the note stays and gets `paperless_missing: true`. If the document comes back, the flag goes away.
 
 ## 🚀 Setup
@@ -117,6 +118,7 @@ flowchart LR
 | File name | Template for new notes. Default: `{{created}} {{title}}`. Use `/` for subfolders. |
 | Note text | Template for the text of new notes. |
 | Link correspondents and document types | Writes them as `[[links]]`, so each can have its own note with backlinks. |
+| Document text tag | Documents with this tag get their text in a collapsed section of their note. Empty by default, which keeps all document text out of the vault. |
 | Include custom fields | Adds custom fields as `paperless_field_<name>` properties. |
 | Sync automatically on this device | Syncs at startup and at the interval. Stored per device. On by default. |
 | Sync interval | Minutes between automatic syncs. `0` syncs at startup only. |
@@ -137,6 +139,23 @@ Example: `{{created_year}}/{{correspondent}}/{{created}} {{title}}` sorts notes 
 
 Run **Paperless Sync: Sync now** from the command palette at any time.
 
+## 📝 Document text for selected documents
+
+Most paperwork doesn't belong in a vault that is synced to the cloud or read by other tools. So document text stays out unless you opt in per document: set **Document text tag**, for example to `obs-sync`, and give that tag to the documents you want in Paperless-ngx. Their notes get a collapsed section at the end:
+
+```markdown
+%% paperless-content start %%
+> [!quote]- Document text
+> Your payment for March 2024 is EUR 84.50.
+%% paperless-content end %%
+```
+
+- The section is updated on every sync, so edits inside it are replaced. Write your own notes above or below it.
+- Remove the tag from a document and the next sync removes the section from its note.
+- Only tagged documents have their text downloaded.
+- If the API user may not read tags, existing sections are left as they are.
+- Clearing the setting stops the plugin from touching note text. Sections that already exist stay, so remove the tag from those documents first if you want them gone.
+
 ## 💡 Good to know
 
 **Several devices, one vault?** Turn on **Sync automatically on this device** on one device only, for example the computer that is always on. The others get the notes through your vault sync. If two devices create a note for the same new document at the same moment, you may get a duplicate. The sync result names it, and you can delete one of the two.
@@ -144,13 +163,13 @@ Run **Paperless Sync: Sync now** from the command palette at any time.
 **Limitations**
 
 - File names are set when a note is created. If a title changes later, `paperless_title` is updated but the file keeps its name.
-- `{{content}}` is filled in once, when the note is created. Document text is only downloaded for new notes.
+- `{{content}}` in the note template is filled in once, when the note is created. Use the document text tag for text that stays up to date.
 - Links in the note text, such as the default `[Open in Paperless]({{url}})`, are not rewritten when the server address changes. `paperless_url` always has the current link.
 - Document links in custom fields are written as document IDs.
 
 ## 🔒 Privacy
 
-The plugin talks to exactly one server: the Paperless-ngx instance you configure. It reads document metadata, contacts no other service and collects no telemetry.
+The plugin talks to exactly one server: the Paperless-ngx instance you configure. It reads document metadata and, for documents you opt in, their text. It contacts no other service and collects no telemetry.
 
 ## 🛠️ Development
 
