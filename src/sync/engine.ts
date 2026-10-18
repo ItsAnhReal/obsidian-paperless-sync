@@ -1,6 +1,13 @@
 import type { PaperlessClient } from '../paperless/client';
 import type { LookupKind, Lookups, PaperlessDocument, ServerInfo } from '../paperless/types';
-import { applyContentSection, contentTagIds, renderContentSection } from './content';
+import {
+	applyContentSection,
+	contentStamp,
+	contentTagIds,
+	renderContentSection,
+	sectionStamp,
+	type ContentMode,
+} from './content';
 import {
 	buildNotePath,
 	renderTemplate,
@@ -34,6 +41,8 @@ export interface VaultPort {
 		path: string,
 		update: (properties: Record<string, unknown>) => void,
 	): Promise<void>;
+	/** The note's text, frontmatter included. */
+	readText(path: string): Promise<string>;
 	/** Changes the note's text, frontmatter included. Resolves to false if nothing changed. */
 	updateText(path: string, update: (text: string) => string): Promise<boolean>;
 }
@@ -47,9 +56,11 @@ export interface SyncOptions {
 	linkMetadata: boolean;
 	includeCustomFields: boolean;
 	/**
-	 * Documents with this tag get their text in a managed section of their note, which is
-	 * kept up to date and removed when the tag is. Empty turns this off.
+	 * Which documents get their text in a managed section of their note: none, those with
+	 * `contentTag`, or all. The section is kept up to date and removed when a document no
+	 * longer qualifies.
 	 */
+	contentMode: ContentMode;
 	contentTag: string;
 }
 
@@ -119,20 +130,28 @@ export async function runSync(
 		unavailable: [...lookups.unavailable].sort(),
 	};
 
-	// Without the setting, note texts are never read. Without the tags list, it is unknown
-	// which documents are opted in, so their sections are left as they are.
-	const tagIds =
-		options.contentTag.trim() === '' ? null : contentTagIds(options.contentTag, lookups);
+	const wantsText = textSelector(options, lookups);
 	const hasContentTag = (document: PaperlessDocument): boolean =>
-		tagIds !== null && (document.tags ?? []).some((id) => tagIds.has(id));
+		wantsText !== null && wantsText(document);
+
+	// Notes whose section already holds the text of the current document version are left
+	// alone, so the text is not downloaded again on every sync.
+	const current = new Set<number>();
+	for (const document of listing.documents) {
+		const notes = notesById.get(document.id);
+		if (notes === undefined || !hasContentTag(document)) continue;
+		const stamp = contentStamp(document.modified);
+		if (stamp !== '' && (await allStamped(vault, notes, stamp))) current.add(document.id);
+	}
 
 	// The text is fetched for opted-in documents and, if the note template uses it, for new
 	// notes, because the template is only rendered when a note is created.
 	const templateContent = templateUses(options.noteTemplate, 'content');
 	const contentIds = listing.documents
-		.filter(
-			(document) =>
-				hasContentTag(document) || (templateContent && !notesById.has(document.id)),
+		.filter((document) =>
+			notesById.has(document.id)
+				? hasContentTag(document) && !current.has(document.id)
+				: hasContentTag(document) || templateContent,
 		)
 		.map((document) => document.id);
 	const contents =
@@ -149,7 +168,9 @@ export async function runSync(
 			const desired = buildProperties(document, lookups, options);
 			if (notes === undefined) {
 				const content = contents.get(document.id) ?? document.content;
-				const section = hasContentTag(document) ? renderContentSection(content) : null;
+				const section = hasContentTag(document)
+					? renderContentSection(content, contentStamp(document.modified))
+					: null;
 				await createNote(vault, { ...document, content }, lookups, desired, section, options);
 				result.created++;
 				continue;
@@ -163,9 +184,12 @@ export async function runSync(
 				);
 				changed = true;
 			}
-			if (tagIds !== null) {
+			if (wantsText !== null && !current.has(document.id)) {
 				const section = hasContentTag(document)
-					? renderContentSection(contents.get(document.id))
+					? renderContentSection(
+							contents.get(document.id),
+							contentStamp(document.modified),
+						)
 					: null;
 				for (const note of notes) {
 					const textChanged = await vault.updateText(note.path, (text) =>
@@ -207,6 +231,36 @@ export async function runSync(
 	}
 
 	return result;
+}
+
+/**
+ * Decides which documents get a text section. When the setting is off, no document does, so
+ * existing sections are removed. Returns `null` if note texts must be left as they are: in
+ * the tagged mode without a tag, which is likely still being typed, and when the tags list
+ * cannot be read, because then it is unknown which documents are opted in.
+ */
+function textSelector(
+	options: SyncOptions,
+	lookups: Lookups,
+): ((document: PaperlessDocument) => boolean) | null {
+	if (options.contentMode === 'all') return () => true;
+	if (options.contentMode !== 'tagged') return () => false;
+	if (options.contentTag.trim().replace(/^#/, '') === '') return null;
+	const tagIds = contentTagIds(options.contentTag, lookups);
+	if (tagIds === null) return null;
+	return (document) => (document.tags ?? []).some((id) => tagIds.has(id));
+}
+
+async function allStamped(vault: VaultPort, notes: NoteRef[], stamp: string): Promise<boolean> {
+	for (const note of notes) {
+		try {
+			if (sectionStamp(await vault.readText(note.path)) !== stamp) return false;
+		} catch {
+			// The note is updated like any other below, which reports the problem.
+			return false;
+		}
+	}
+	return true;
 }
 
 async function createNote(

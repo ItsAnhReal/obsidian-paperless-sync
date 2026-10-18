@@ -3,8 +3,10 @@ import {
 	applyContentSection,
 	CONTENT_END,
 	CONTENT_START,
+	contentStamp,
 	contentTagIds,
 	renderContentSection,
+	sectionStamp,
 } from '../src/sync/content';
 import { makeLookups } from './helpers';
 
@@ -31,8 +33,22 @@ describe('contentTagIds', () => {
 describe('renderContentSection', () => {
 	it('quotes every line in a collapsed callout between the markers', () => {
 		expect(renderContentSection('Erste Zeile\r\n\r\nZweite Zeile  \n')).toBe(
-			[CONTENT_START, '> [!quote]- Document text', '> Erste Zeile', '>', '> Zweite Zeile', CONTENT_END].join('\n'),
+			[`${CONTENT_START} %%`, '> [!quote]- Document text', '> Erste Zeile', '>', '> Zweite Zeile', CONTENT_END].join('\n'),
 		);
+	});
+
+	it('stores the stamp in the start line', () => {
+		const section = renderContentSection('Text', contentStamp('2024-03-16T09:30:00.123+01:00')) ?? '';
+		expect(section.split('\n')[0]).toBe(`${CONTENT_START} 2024-03-16T09:30:00.123+01:00 %%`);
+		expect(sectionStamp(`Mine\n\n${section}\n`)).toBe('2024-03-16T09:30:00.123+01:00');
+		expect(sectionStamp(`${SECTION}\n`)).toBe('');
+		expect(sectionStamp('Mine\n')).toBeNull();
+		expect(contentStamp(null)).toBe('');
+	});
+
+	it('replaces a section whatever its stamp', () => {
+		const old = renderContentSection('Alt', 'a') ?? '';
+		expect(applyContentSection(`Mine\n\n${old}\n`, SECTION)).toBe(`Mine\n\n${SECTION}\n`);
 	});
 
 	it('returns null for empty text', () => {
@@ -70,6 +86,6 @@ describe('applyContentSection', () => {
 	});
 
 	it('refuses a section without an end marker', () => {
-		expect(() => applyContentSection(`Mine\n${CONTENT_START}\n> text\n`, SECTION)).toThrow(/without/);
+		expect(() => applyContentSection(`Mine\n${CONTENT_START} %%\n> text\n`, SECTION)).toThrow(/without/);
 	});
 });

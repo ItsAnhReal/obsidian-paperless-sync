@@ -55,6 +55,7 @@ const DOCUMENT_FIELDS = [
 	'tags',
 	'created',
 	'added',
+	'modified',
 	'archive_serial_number',
 ];
 

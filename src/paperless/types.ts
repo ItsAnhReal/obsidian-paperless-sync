@@ -9,6 +9,8 @@ export interface PaperlessDocument {
 	/** A date (`2024-01-15`) since API version 9, a datetime before that. */
 	created: string | null;
 	added: string | null;
+	/** A datetime. */
+	modified?: string | null;
 	archive_serial_number: number | null;
 	custom_fields?: PaperlessCustomFieldValue[];
 	content?: string;
