@@ -42,9 +42,18 @@
 			"tags": [2],
 			"created": "2021-03-01",
 			"added": "2024-01-10T18:22:11.123456+01:00",
+			"modified": "2024-06-01T09:15:00.000000+02:00",
 			"archive_serial_number": 1,
 			"custom_fields": [],
-			"content": "Mietvertrag zwischen der Hausverwaltung und dem Mieter."
+			"content": "Mietvertrag zwischen der Hausverwaltung und dem Mieter.",
+			"notes": [
+				{
+					"id": 1,
+					"note": "Kaution am 15.03.2021 überwiesen.",
+					"created": "2021-03-15T10:00:00.000000+01:00",
+					"user": { "id": 1, "username": "anh" }
+				}
+			]
 		},
 		{
 			"id": 2,

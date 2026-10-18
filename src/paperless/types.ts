@@ -14,6 +14,26 @@ export interface PaperlessDocument {
 	archive_serial_number: number | null;
 	custom_fields?: PaperlessCustomFieldValue[];
 	content?: string;
+	/** Only requested if notes are synced. */
+	notes?: PaperlessNote[];
+}
+
+/** A note written on a document in Paperless-ngx. */
+export interface PaperlessNote {
+	id: number;
+	note: string;
+	created: string | null;
+	/** A user object on current servers, a user ID on older ones. */
+	user?: number | { id: number; username?: string } | null;
+}
+
+/** A document found by the full text search, limited to the fields the search shows. */
+export interface SearchHit {
+	id: number;
+	title: string;
+	created: string | null;
+	correspondent: number | null;
+	tags: number[];
 }
 
 export interface PaperlessCustomFieldValue {

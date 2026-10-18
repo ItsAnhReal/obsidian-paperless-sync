@@ -359,4 +359,82 @@ describe('runSync', () => {
 		expect(note.properties.paperless_url).toBe('https://docs.example.com/documents/1/details');
 		expect(note.properties.paperless_correspondent).toBe('[[Hausverwaltung]]');
 	});
+
+	it('writes the modified date', async () => {
+		const { server, vault, sync } = setup();
+		server.state.documents[0] = makeDocument({ id: 1, title: 'Mietvertrag', modified: '2024-05-02T12:00:00+02:00' });
+		await sync();
+		expect(vault.get('Paperless/2024-01-15 Mietvertrag.md').properties.paperless_modified).toBe('2024-05-02');
+	});
+
+	it('skips documents left out by the tag filters without flagging their notes', async () => {
+		const { server, vault, sync } = setup();
+		server.state.tags.push({ id: 7, name: 'Privat' });
+		await sync();
+		server.state.documents[1] = makeDocument({ id: 2, title: 'Stromrechnung', created: '2024-02-01', tags: [7] });
+		server.state.documents.push(makeDocument({ id: 3, title: 'Tagebuch', tags: [7] }));
+
+		const result = await sync({ excludeTags: 'privat' });
+		expect(result).toMatchObject({ created: 0, excluded: 2, missing: 0, unchanged: 1 });
+		expect(vault.notes.has('Paperless/2024-01-15 Tagebuch.md')).toBe(false);
+		expect(vault.get('Paperless/2024-02-01 Stromrechnung.md').properties.paperless_tags).toBeUndefined();
+
+		expect(await sync({ includeTags: 'Wohnung' })).toMatchObject({ created: 0, excluded: 2, unchanged: 1 });
+		expect((await sync({ includeTags: 'Wohnung, Wohnnug' })).unknownFilterTags).toEqual(['wohnnug']);
+	});
+
+	it('fails instead of guessing when a tag filter is set but tags cannot be read', async () => {
+		const { server, vault, sync } = setup();
+		server.state.forbidden = ['/api/tags/'];
+		await expect(sync({ excludeTags: 'privat' })).rejects.toThrow(/tag filters/);
+		expect(vault.notes.size).toBe(0);
+	});
+
+	it('keeps the Paperless-ngx notes in a managed section', async () => {
+		const { server, vault, sync } = setup();
+		const note = { id: 1, note: 'Kaution gezahlt', created: '2024-03-01T08:00:00Z', user: { id: 1, username: 'anh' } };
+		server.state.documents = [makeDocument({ id: 1, title: 'Mietvertrag', notes: [note] })];
+		await sync({ includeNotes: true });
+		const path = 'Paperless/2024-01-15 Mietvertrag.md';
+		expect(server.requests.at(-1)?.url.searchParams.get('fields')).toMatch(/,notes$/);
+		expect(vault.get(path).body).toContain('> Kaution gezahlt');
+
+		const writes = vault.writes;
+		expect(await sync({ includeNotes: true })).toMatchObject({ unchanged: 1 });
+		expect(vault.writes).toBe(writes);
+
+		server.state.documents = [makeDocument({ id: 1, title: 'Mietvertrag', notes: [] })];
+		expect(await sync({ includeNotes: true })).toMatchObject({ updated: 1 });
+		expect(vault.get(path).body).toBe('[Open in Paperless](https://paperless.test/documents/1/details)\n');
+
+		// Turned off, notes are not requested and existing sections are removed.
+		server.state.documents = [makeDocument({ id: 1, title: 'Mietvertrag', notes: [note] })];
+		await sync({ includeNotes: true });
+		expect(vault.get(path).body).toContain('> Kaution gezahlt');
+		expect(await sync()).toMatchObject({ updated: 1 });
+		expect(server.requests.at(-1)?.url.searchParams.get('fields')).not.toMatch(/notes/);
+		expect(vault.get(path).body).toBe('[Open in Paperless](https://paperless.test/documents/1/details)\n');
+	});
+
+	it('syncs only the documents in the scope', async () => {
+		const { server, vault, sync } = setup();
+		await sync();
+		server.state.documents[0] = makeDocument({ id: 1, title: 'Neuer Titel' });
+		server.state.documents[1] = makeDocument({ id: 2, title: 'Auch neu' });
+		server.state.documents.push(makeDocument({ id: 3, title: 'Neues Dokument' }));
+		const client = new PaperlessClient(SERVER, TOKEN, server.httpGet);
+
+		const result = await runSync(client, vault, DEFAULT_OPTIONS, { ids: [1] });
+		expect(result).toMatchObject({ documents: 1, updated: 1, created: 0, missing: 0 });
+		expect(vault.get('Paperless/2024-01-15 Mietvertrag.md').properties.paperless_title).toBe('Neuer Titel');
+		expect(vault.get('Paperless/2024-02-01 Stromrechnung.md').properties.paperless_title).toBe('Stromrechnung');
+
+		const created = await runSync(client, vault, DEFAULT_OPTIONS, { ids: [3] });
+		expect(created.createdPaths).toEqual(['Paperless/2024-01-15 Neues Dokument.md']);
+
+		server.state.documents = server.state.documents.filter((document) => document.id !== 2);
+		const gone = await runSync(client, vault, DEFAULT_OPTIONS, { ids: [2] });
+		expect(gone).toMatchObject({ documents: 0, missing: 1 });
+		expect(vault.get('Paperless/2024-02-01 Stromrechnung.md').properties.paperless_missing).toBe(true);
+	});
 });

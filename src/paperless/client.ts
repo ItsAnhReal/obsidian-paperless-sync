@@ -6,6 +6,7 @@ import type {
 	NamedItem,
 	Paginated,
 	PaperlessDocument,
+	SearchHit,
 	ServerInfo,
 } from './types';
 
@@ -59,8 +60,25 @@ const DOCUMENT_FIELDS = [
 	'archive_serial_number',
 ];
 
+const SEARCH_FIELDS = 'id,title,created,correspondent,tags';
+
+export interface SearchTagFilter {
+	/** Only documents with at least one of these tags. Must not be empty. */
+	anyOf?: readonly number[];
+	/** No documents with any of these tags. */
+	noneOf?: readonly number[];
+}
+
 export interface DocumentListOptions {
 	includeCustomFields: boolean;
+	includeNotes: boolean;
+}
+
+function documentFields(options: DocumentListOptions): string {
+	const fields = [...DOCUMENT_FIELDS];
+	if (options.includeCustomFields) fields.push('custom_fields');
+	if (options.includeNotes) fields.push('notes');
+	return fields.join(',');
 }
 
 /** Trims the URL and removes trailing slashes. Returns `null` if it isn't an http(s) URL. */
@@ -114,16 +132,42 @@ export class PaperlessClient {
 	}
 
 	async listDocuments(options: DocumentListOptions): Promise<DocumentListing> {
-		const fields = [...DOCUMENT_FIELDS];
-		if (options.includeCustomFields) fields.push('custom_fields');
 		const { items, count } = await this.listAll<PaperlessDocument>(
 			'/api/documents/',
-			{ ordering: 'id', fields: fields.join(',') },
+			{ ordering: 'id', fields: documentFields(options) },
 		);
 		const byId = new Map<number, PaperlessDocument>();
 		for (const document of items) byId.set(document.id, document);
 		const documents = [...byId.values()].sort((a, b) => a.id - b.id);
 		return { documents, complete: documents.length >= count };
+	}
+
+	/** Fetches the given documents, sorted by ID. Documents that no longer exist are left out. */
+	async fetchDocuments(
+		ids: readonly number[],
+		options: DocumentListOptions,
+	): Promise<PaperlessDocument[]> {
+		const documents = await this.listByIds<PaperlessDocument>(ids, documentFields(options));
+		return documents.sort((a, b) => a.id - b.id);
+	}
+
+	/**
+	 * Runs the Paperless-ngx full text search and returns the best matches. The tag filters
+	 * are applied by the server, so excluded documents never take up the result list.
+	 */
+	async search(query: string, limit: number, tags: SearchTagFilter = {}): Promise<SearchHit[]> {
+		const params: Record<string, string> = {
+			query,
+			page: '1',
+			page_size: String(limit),
+			fields: SEARCH_FIELDS,
+		};
+		if (tags.anyOf !== undefined) params.tags__id__in = tags.anyOf.join(',');
+		if (tags.noneOf !== undefined && tags.noneOf.length > 0) {
+			params.tags__id__none = tags.noneOf.join(',');
+		}
+		const { body } = await this.get<Paginated<SearchHit>>('/api/documents/', params);
+		return body.results;
 	}
 
 	/** Fetches the text of the given documents. Documents that no longer exist are left out. */

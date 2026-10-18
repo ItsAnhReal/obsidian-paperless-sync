@@ -8,6 +8,8 @@ import {
 	sectionStamp,
 	type ContentMode,
 } from './content';
+import { buildTagFilter, unknownFilterTags } from './filter';
+import { applyNotesSection, renderNotesSection } from './notes';
 import {
 	buildNotePath,
 	renderTemplate,
@@ -62,6 +64,17 @@ export interface SyncOptions {
 	 */
 	contentMode: ContentMode;
 	contentTag: string;
+	/** Keep the notes written on each document in Paperless-ngx in a managed section. */
+	includeNotes: boolean;
+	/** Comma separated tag names. If set, only documents with one of them are synced. */
+	includeTags: string;
+	/** Comma separated tag names. Documents with one of them are not synced. */
+	excludeTags: string;
+}
+
+/** Limits a sync to some documents, for example to the note that is open. */
+export interface SyncScope {
+	ids: readonly number[];
 }
 
 export interface SyncFailure {
@@ -73,8 +86,14 @@ export interface SyncResult {
 	server: ServerInfo;
 	documents: number;
 	created: number;
+	/** Paths of the notes created by this sync. */
+	createdPaths: string[];
 	updated: number;
 	unchanged: number;
+	/** Documents left out by the tag filters. Their notes are neither updated nor flagged. */
+	excluded: number;
+	/** Names in the tag filters that match no tag in Paperless-ngx. */
+	unknownFilterTags: string[];
 	/** Notes newly flagged because their document is no longer on the server. */
 	missing: number;
 	/** Documents that have more than one note. */
@@ -95,22 +114,31 @@ const MAX_NAME_ATTEMPTS = 5;
  * One-way sync from Paperless-ngx into the vault: creates a note for every new document,
  * updates the managed properties of existing notes and flags notes of removed documents.
  * Notes are matched by their `paperless_id` property, never by path, and never deleted.
+ * With a scope, only the documents in it are synced and checked for removal.
  */
 export async function runSync(
 	client: PaperlessClient,
 	vault: VaultPort,
 	options: SyncOptions,
+	scope?: SyncScope,
 ): Promise<SyncResult> {
 	const server = await client.connect();
 	const lookups = await client.fetchLookups(options.includeCustomFields);
-	const listing = await client.listDocuments({
+	const isSynced = buildTagFilter(options, lookups);
+	const listOptions = {
 		includeCustomFields: options.includeCustomFields,
-	});
+		includeNotes: options.includeNotes,
+	};
+	const listing =
+		scope === undefined
+			? await client.listDocuments(listOptions)
+			: { documents: await client.fetchDocuments(scope.ids, listOptions), complete: true };
+	const inScope = scope === undefined ? null : new Set(scope.ids);
 
 	const notesById = new Map<number, NoteRef[]>();
 	for (const note of await vault.listDocumentNotes()) {
 		const id = readDocumentId(note.properties);
-		if (id === null) continue;
+		if (id === null || (inScope !== null && !inScope.has(id))) continue;
 		const notes = notesById.get(id) ?? [];
 		notes.push(note);
 		notesById.set(id, notes);
@@ -120,8 +148,11 @@ export async function runSync(
 		server,
 		documents: listing.documents.length,
 		created: 0,
+		createdPaths: [],
 		updated: 0,
 		unchanged: 0,
+		excluded: 0,
+		unknownFilterTags: unknownFilterTags(options, lookups),
 		missing: 0,
 		duplicateIds: [],
 		failures: [],
@@ -139,7 +170,7 @@ export async function runSync(
 	const current = new Set<number>();
 	for (const document of listing.documents) {
 		const notes = notesById.get(document.id);
-		if (notes === undefined || !hasContentTag(document)) continue;
+		if (notes === undefined || !isSynced(document.tags) || !hasContentTag(document)) continue;
 		const stamp = contentStamp(document.modified);
 		if (stamp !== '' && (await allStamped(vault, notes, stamp))) current.add(document.id);
 	}
@@ -148,10 +179,12 @@ export async function runSync(
 	// notes, because the template is only rendered when a note is created.
 	const templateContent = templateUses(options.noteTemplate, 'content');
 	const contentIds = listing.documents
-		.filter((document) =>
-			notesById.has(document.id)
-				? hasContentTag(document) && !current.has(document.id)
-				: hasContentTag(document) || templateContent,
+		.filter(
+			(document) =>
+				isSynced(document.tags) &&
+				(notesById.has(document.id)
+					? hasContentTag(document) && !current.has(document.id)
+					: hasContentTag(document) || templateContent),
 		)
 		.map((document) => document.id);
 	const contents =
@@ -163,7 +196,15 @@ export async function runSync(
 	const seen = new Set<number>();
 	for (const document of listing.documents) {
 		seen.add(document.id);
+		if (!isSynced(document.tags)) {
+			result.excluded++;
+			continue;
+		}
 		const notes = notesById.get(document.id);
+		// Turned off, notes sections are removed. Without the notes field, for example on an
+		// old server, they are left as they are.
+		const syncNotes = !options.includeNotes || document.notes !== undefined;
+		const notesSection = options.includeNotes ? renderNotesSection(document.notes ?? []) : null;
 		try {
 			const desired = buildProperties(document, lookups, options);
 			if (notes === undefined) {
@@ -171,8 +212,16 @@ export async function runSync(
 				const section = hasContentTag(document)
 					? renderContentSection(content, contentStamp(document.modified))
 					: null;
-				await createNote(vault, { ...document, content }, lookups, desired, section, options);
+				const path = await createNote(
+					vault,
+					{ ...document, content },
+					lookups,
+					desired,
+					{ content: section, notes: notesSection },
+					options,
+				);
 				result.created++;
+				result.createdPaths.push(path);
 				continue;
 			}
 			if (notes.length > 1) result.duplicateIds.push(document.id);
@@ -184,17 +233,22 @@ export async function runSync(
 				);
 				changed = true;
 			}
-			if (wantsText !== null && !current.has(document.id)) {
-				const section = hasContentTag(document)
+			// Reading every note is cheap: a note is only written if its text changes.
+			const syncText = wantsText !== null && !current.has(document.id);
+			if (syncText || syncNotes) {
+				const contentSection = hasContentTag(document)
 					? renderContentSection(
 							contents.get(document.id),
 							contentStamp(document.modified),
 						)
 					: null;
+				const update = (text: string): string => {
+					let updated = syncText ? applyContentSection(text, contentSection) : text;
+					if (syncNotes) updated = applyNotesSection(updated, notesSection);
+					return updated;
+				};
 				for (const note of notes) {
-					const textChanged = await vault.updateText(note.path, (text) =>
-						applyContentSection(text, section),
-					);
+					const textChanged = await vault.updateText(note.path, update);
 					changed ||= textChanged;
 				}
 			}
@@ -268,9 +322,9 @@ async function createNote(
 	document: PaperlessDocument,
 	lookups: Lookups,
 	properties: Properties,
-	section: string | null,
+	sections: { content: string | null; notes: string | null },
 	options: SyncOptions,
-): Promise<void> {
+): Promise<string> {
 	const variables = templateVariables(
 		document,
 		lookups,
@@ -278,7 +332,7 @@ async function createNote(
 	);
 	const rendered = renderTemplate(options.noteTemplate, variables);
 	const text = rendered === '' || rendered.endsWith('\n') ? rendered : `${rendered}\n`;
-	const body = applyContentSection(text, section);
+	const body = applyNotesSection(applyContentSection(text, sections.content), sections.notes);
 
 	let lastError: unknown = null;
 	for (let attempt = 0; attempt < MAX_NAME_ATTEMPTS; attempt++) {
@@ -292,7 +346,7 @@ async function createNote(
 		if (vault.exists(path)) continue;
 		try {
 			await vault.createNote(path, properties, body);
-			return;
+			return path;
 		} catch (error) {
 			lastError = error;
 		}

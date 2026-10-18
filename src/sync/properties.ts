@@ -18,6 +18,7 @@ export const PROPERTY = {
 	tags: 'paperless_tags',
 	created: 'paperless_created',
 	added: 'paperless_added',
+	modified: 'paperless_modified',
 	asn: 'paperless_asn',
 	storagePath: 'paperless_storage_path',
 	missing: 'paperless_missing',
@@ -113,6 +114,7 @@ export function buildProperties(
 	set(PROPERTY.tags, tags.length > 0 ? tags : undefined);
 	set(PROPERTY.created, toDate(document.created));
 	set(PROPERTY.added, toDate(document.added));
+	set(PROPERTY.modified, toDate(document.modified));
 	set(PROPERTY.asn, document.archive_serial_number ?? undefined);
 	set(
 		PROPERTY.storagePath,

@@ -108,9 +108,30 @@ export class PaperlessSyncSettingTab extends PluginSettingTab {
 						control: { type: 'text', key: 'contentTag', placeholder: 'obs-sync' },
 					},
 					{
+						name: 'Include Paperless-ngx notes',
+						desc: 'Keep the notes written on each document in Paperless-ngx in a collapsed section of its note. The section is updated on every sync. Turning this off removes the sections again.',
+						control: { type: 'toggle', key: 'includeNotes' },
+					},
+					{
 						name: 'Include custom fields',
 						desc: 'Add the custom fields of each document as properties.',
 						control: { type: 'toggle', key: 'includeCustomFields' },
+					},
+				],
+			},
+			{
+				type: 'group',
+				heading: 'Filter',
+				items: [
+					{
+						name: 'Only documents with these tags',
+						desc: 'Comma separated Paperless-ngx tags. If set, only documents with at least one of them get a note. Leave empty to sync all documents.',
+						control: { type: 'text', key: 'includeTags', placeholder: 'All documents' },
+					},
+					{
+						name: 'Skip documents with these tags',
+						desc: 'Comma separated Paperless-ngx tags. Documents with one of them get no note. Notes that already exist are kept but no longer updated.',
+						control: { type: 'text', key: 'excludeTags', placeholder: 'private' },
 					},
 				],
 			},
@@ -166,6 +187,15 @@ export class PaperlessSyncSettingTab extends PluginSettingTab {
 							key: 'linkBaseUrl',
 							placeholder: 'Same as server address',
 							validate: validateUrl,
+						},
+					},
+					{
+						name: 'Folder for removed documents',
+						desc: 'Where the "Show notes of removed documents" command moves notes whose document is no longer in Paperless-ngx.',
+						control: {
+							type: 'folder',
+							key: 'archiveFolder',
+							placeholder: 'Removed, inside the notes folder',
 						},
 					},
 				],

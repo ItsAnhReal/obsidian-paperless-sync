@@ -49,6 +49,9 @@ export const DEFAULT_OPTIONS: SyncOptions = {
 	includeCustomFields: true,
 	contentMode: 'off',
 	contentTag: '',
+	includeNotes: false,
+	includeTags: '',
+	excludeTags: '',
 };
 
 export interface FakeServerState {

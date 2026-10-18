@@ -17,6 +17,14 @@ export interface PaperlessSyncSettings {
 	contentMode: ContentMode;
 	/** Tag that opts a document into syncing its text when `contentMode` is `tagged`. */
 	contentTag: string;
+	/** Keep the notes written on each document in Paperless-ngx in a section of its note. */
+	includeNotes: boolean;
+	/** Comma separated tag names. If set, only documents with one of them are synced. */
+	includeTags: string;
+	/** Comma separated tag names. Documents with one of them are not synced. */
+	excludeTags: string;
+	/** Where notes of removed documents are moved to. Empty means `Removed` in the folder. */
+	archiveFolder: string;
 }
 
 export const DEFAULT_SETTINGS: PaperlessSyncSettings = {
@@ -31,6 +39,10 @@ export const DEFAULT_SETTINGS: PaperlessSyncSettings = {
 	linkBaseUrl: '',
 	contentMode: 'off',
 	contentTag: '',
+	includeNotes: false,
+	includeTags: '',
+	excludeTags: '',
+	archiveFolder: '',
 };
 
 export const MIN_SYNC_INTERVAL_MINUTES = 5;
