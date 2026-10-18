@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-paperless-sync",
-	"version": "0.1.1",
+	"version": "0.1.0",
 	"description": "Obsidian plugin that keeps one note per Paperless-ngx document, with its metadata as properties.",
 	"main": "main.js",
 	"type": "module",
