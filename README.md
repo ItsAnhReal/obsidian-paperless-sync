@@ -29,7 +29,7 @@ paperless_field_betrag: EUR84.50
 
 ## Setup
 
-Requires Obsidian 1.13.2 or newer.
+Requires Obsidian 1.13.2 or newer on desktop (macOS, Windows or Linux). The plugin does not run on mobile, but the notes it creates are ordinary notes: they reach your phone with the rest of your vault through whatever sync you use (iCloud, Obsidian Sync, Syncthing and so on).
 
 1. Install and enable the plugin.
 2. In Paperless-ngx, open **My Profile** and copy the API token. A dedicated user with view-only permissions is a good idea: give it **View** for documents, tags, correspondents, document types, storage paths and custom fields. If one of the lists other than documents is not readable, the sync still runs and leaves the properties that come from that list as they are.
@@ -50,7 +50,7 @@ The token is kept in Obsidian's secret storage on the device. It is not written 
 | Note text | Template for the text of new notes. |
 | Link correspondents and document types | Writes them as `[[links]]`, so each can have its own note with backlinks. |
 | Include custom fields | Adds custom fields as `paperless_field_<name>` properties. |
-| Sync automatically on this device | Syncs at startup and at the interval. Stored per device. On by default on desktop, off on mobile. |
+| Sync automatically on this device | Syncs at startup and at the interval. Stored per device. On by default. |
 | Sync interval | Minutes between automatic syncs. `0` syncs at startup only. |
 | Address for links | Base address for document links, if it differs from the server address. |
 
