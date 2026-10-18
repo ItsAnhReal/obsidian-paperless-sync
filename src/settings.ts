@@ -90,8 +90,21 @@ export class PaperlessSyncSettingTab extends PluginSettingTab {
 						control: { type: 'toggle', key: 'linkMetadata' },
 					},
 					{
+						name: 'Document text',
+						desc: 'Put the text of documents in a collapsed section at the end of their note. The section is updated on every sync and removed when a document no longer qualifies. Keep in mind that the text then is wherever your vault is synced or read.',
+						control: {
+							type: 'dropdown',
+							key: 'contentMode',
+							options: {
+								off: 'Do not sync',
+								tagged: 'Only documents with the tag below',
+								all: 'All documents',
+							},
+						},
+					},
+					{
 						name: 'Document text tag',
-						desc: 'Documents with this Paperless-ngx tag get their text in a collapsed section at the end of their note. The section is updated on every sync and removed when the tag is removed from the document. Leave empty to keep all document text out of your vault.',
+						desc: 'The Paperless-ngx tag that selects documents when "Document text" is set to tagged documents only.',
 						control: { type: 'text', key: 'contentTag', placeholder: 'obs-sync' },
 					},
 					{

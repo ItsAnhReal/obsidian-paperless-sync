@@ -1,6 +1,11 @@
 import type { PaperlessClient } from '../paperless/client';
 import type { LookupKind, Lookups, PaperlessDocument, ServerInfo } from '../paperless/types';
-import { applyContentSection, contentTagIds, renderContentSection } from './content';
+import {
+	applyContentSection,
+	contentTagIds,
+	renderContentSection,
+	type ContentMode,
+} from './content';
 import {
 	buildNotePath,
 	renderTemplate,
@@ -47,9 +52,11 @@ export interface SyncOptions {
 	linkMetadata: boolean;
 	includeCustomFields: boolean;
 	/**
-	 * Documents with this tag get their text in a managed section of their note, which is
-	 * kept up to date and removed when the tag is. Empty turns this off.
+	 * Which documents get their text in a managed section of their note: none, those with
+	 * `contentTag`, or all. The section is kept up to date and removed when a document no
+	 * longer qualifies.
 	 */
+	contentMode: ContentMode;
 	contentTag: string;
 }
 
@@ -119,12 +126,9 @@ export async function runSync(
 		unavailable: [...lookups.unavailable].sort(),
 	};
 
-	// Without the setting, note texts are never read. Without the tags list, it is unknown
-	// which documents are opted in, so their sections are left as they are.
-	const tagIds =
-		options.contentTag.trim() === '' ? null : contentTagIds(options.contentTag, lookups);
+	const wantsText = textSelector(options, lookups);
 	const hasContentTag = (document: PaperlessDocument): boolean =>
-		tagIds !== null && (document.tags ?? []).some((id) => tagIds.has(id));
+		wantsText !== null && wantsText(document);
 
 	// The text is fetched for opted-in documents and, if the note template uses it, for new
 	// notes, because the template is only rendered when a note is created.
@@ -163,7 +167,7 @@ export async function runSync(
 				);
 				changed = true;
 			}
-			if (tagIds !== null) {
+			if (wantsText !== null) {
 				const section = hasContentTag(document)
 					? renderContentSection(contents.get(document.id))
 					: null;
@@ -207,6 +211,22 @@ export async function runSync(
 	}
 
 	return result;
+}
+
+/**
+ * Decides which documents get a text section, or returns `null` if note texts must be left as
+ * they are: when the setting is off, and when the tags list cannot be read, because then it
+ * is unknown which documents are opted in.
+ */
+function textSelector(
+	options: SyncOptions,
+	lookups: Lookups,
+): ((document: PaperlessDocument) => boolean) | null {
+	if (options.contentMode === 'all') return () => true;
+	if (options.contentMode !== 'tagged') return null;
+	const tagIds = contentTagIds(options.contentTag, lookups);
+	if (tagIds === null) return null;
+	return (document) => (document.tags ?? []).some((id) => tagIds.has(id));
 }
 
 async function createNote(

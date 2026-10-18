@@ -1,3 +1,5 @@
+import { CONTENT_MODES, type ContentMode } from './sync/content';
+
 export interface PaperlessSyncSettings {
 	serverUrl: string;
 	/** Name of the secret in Obsidian's secret storage that holds the API token. */
@@ -11,7 +13,9 @@ export interface PaperlessSyncSettings {
 	syncIntervalMinutes: number;
 	/** Base URL for document links, if it differs from the server URL. */
 	linkBaseUrl: string;
-	/** Tag that opts a document into syncing its text into the note. Empty turns it off. */
+	/** Which documents get their text in their note. */
+	contentMode: ContentMode;
+	/** Tag that opts a document into syncing its text when `contentMode` is `tagged`. */
 	contentTag: string;
 }
 
@@ -25,6 +29,7 @@ export const DEFAULT_SETTINGS: PaperlessSyncSettings = {
 	includeCustomFields: true,
 	syncIntervalMinutes: 60,
 	linkBaseUrl: '',
+	contentMode: 'off',
 	contentTag: '',
 };
 
@@ -45,6 +50,12 @@ export function normalizeSettings(stored: unknown): PaperlessSyncSettings {
 		if (!isSettingKey(key) || typeof value !== typeof DEFAULT_SETTINGS[key]) continue;
 		if (typeof value === 'number' && !Number.isFinite(value)) continue;
 		Object.assign(settings, { [key]: value as unknown });
+	}
+	if (!CONTENT_MODES.includes(settings.contentMode)) {
+		settings.contentMode = DEFAULT_SETTINGS.contentMode;
+	} else if (!('contentMode' in stored) && settings.contentTag.trim() !== '') {
+		// Version 0.1.0 had only the tag, and a tag that was set turned the text sync on.
+		settings.contentMode = 'tagged';
 	}
 	return settings;
 }

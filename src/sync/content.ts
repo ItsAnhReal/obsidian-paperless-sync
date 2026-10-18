@@ -8,6 +8,10 @@ import type { Lookups } from '../paperless/types';
 export const CONTENT_START = '%% paperless-content start %%';
 export const CONTENT_END = '%% paperless-content end %%';
 
+export type ContentMode = 'off' | 'tagged' | 'all';
+
+export const CONTENT_MODES: readonly ContentMode[] = ['off', 'tagged', 'all'];
+
 const CALLOUT_HEADER = '> [!quote]- Document text';
 
 /**

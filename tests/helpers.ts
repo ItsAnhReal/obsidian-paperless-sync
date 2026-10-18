@@ -47,6 +47,7 @@ export const DEFAULT_OPTIONS: SyncOptions = {
 	linkBaseUrl: SERVER,
 	linkMetadata: false,
 	includeCustomFields: true,
+	contentMode: 'off',
 	contentTag: '',
 };
 

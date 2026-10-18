@@ -10,7 +10,7 @@ import {
 	TOKEN,
 	type FakeServer,
 } from './helpers';
-import { renderContentSection } from '../src/sync/content';
+import { CONTENT_START, renderContentSection } from '../src/sync/content';
 
 function setup(): { server: FakeServer; vault: FakeVault; sync: (options?: Partial<SyncOptions>) => Promise<SyncResult> } {
 	const server = createFakeServer({
@@ -197,7 +197,7 @@ describe('runSync', () => {
 			makeDocument({ id: 1, title: 'Brief', tags: [9], content: 'Sehr geehrte Damen und Herren' }),
 			makeDocument({ id: 2, title: 'Steuer', content: 'Geheim' }),
 		];
-		const options = { contentTag: 'obs-sync' };
+		const options = { contentMode: 'tagged', contentTag: 'obs-sync' } as const;
 		await sync(options);
 		const brief = 'Paperless/2024-01-15 Brief.md';
 		const steuer = 'Paperless/2024-01-15 Steuer.md';
@@ -228,16 +228,35 @@ describe('runSync', () => {
 		);
 	});
 
+	it('syncs the text of all documents in the all mode and leaves notes alone when off', async () => {
+		const { server, vault, sync } = setup();
+		server.state.documents = [
+			makeDocument({ id: 1, title: 'Brief', content: 'Hallo' }),
+			makeDocument({ id: 2, title: 'Leer', content: '' }),
+		];
+		await sync({ contentMode: 'all', contentTag: 'ignored' });
+		expect(vault.get('Paperless/2024-01-15 Brief.md').body).toContain('> Hallo');
+		expect(vault.get('Paperless/2024-01-15 Leer.md').body).not.toContain(CONTENT_START);
+
+		const writes = vault.writes;
+		expect(await sync({ contentMode: 'off' })).toMatchObject({ updated: 0, unchanged: 2 });
+		expect(vault.writes).toBe(writes);
+		expect(vault.get('Paperless/2024-01-15 Brief.md').body).toContain('> Hallo');
+
+		expect(await sync({ contentMode: 'tagged', contentTag: 'obs-sync' })).toMatchObject({ updated: 1 });
+		expect(vault.get('Paperless/2024-01-15 Brief.md').body).not.toContain(CONTENT_START);
+	});
+
 	it('leaves document text sections alone when the tags cannot be read', async () => {
 		const { server, vault, sync } = setup();
 		server.state.tags.push({ id: 9, name: 'obs-sync' });
 		server.state.documents = [makeDocument({ id: 1, title: 'Brief', tags: [9], content: 'Text' })];
-		await sync({ contentTag: 'obs-sync' });
+		await sync({ contentMode: 'tagged', contentTag: 'obs-sync' });
 		const body = vault.get('Paperless/2024-01-15 Brief.md').body;
 		expect(body).toContain('> Text');
 
 		server.state.forbidden = ['/api/tags/'];
-		await sync({ contentTag: 'obs-sync' });
+		await sync({ contentMode: 'tagged', contentTag: 'obs-sync' });
 		expect(vault.get('Paperless/2024-01-15 Brief.md').body).toBe(body);
 	});
 
