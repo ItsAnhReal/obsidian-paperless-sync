@@ -1,5 +1,7 @@
-import { Notice, Platform, Plugin, setTooltip } from 'obsidian';
+import { MarkdownView, Notice, Platform, Plugin, setTooltip, type TFile } from 'obsidian';
 import { httpGet } from './obsidian/http';
+import { RemovedDocumentsModal } from './obsidian/removed-modal';
+import { PaperlessSearchModal, type SearchContext } from './obsidian/search-modal';
 import { ObsidianVault } from './obsidian/vault';
 import { normalizeServerUrl, PaperlessClient, PaperlessError } from './paperless/client';
 import {
@@ -10,7 +12,10 @@ import {
 } from './config';
 import type { LookupKind } from './paperless/types';
 import { PaperlessSyncSettingTab } from './settings';
-import { runSync, type SyncOptions, type SyncResult } from './sync/engine';
+import { resolveArchiveFolder } from './sync/archive';
+import { runSync, type SyncOptions, type SyncResult, type SyncScope } from './sync/engine';
+import type { TagFilterOptions } from './sync/filter';
+import { documentUrl, PROPERTY, readDocumentId } from './sync/properties';
 
 const AUTO_SYNC_STORAGE_KEY = 'paperless-sync-auto';
 const STARTUP_DELAY_MS = 10_000;
@@ -42,6 +47,57 @@ export default class PaperlessSyncPlugin extends Plugin {
 			name: 'Sync now',
 			callback: () => {
 				void this.sync(true);
+			},
+		});
+
+		this.addCommand({
+			id: 'open-in-paperless',
+			name: 'Open document in Paperless-ngx',
+			checkCallback: (checking) => {
+				const id = this.activeDocumentId();
+				if (id === null) return false;
+				if (!checking) this.openInPaperless(id);
+				return true;
+			},
+		});
+
+		this.addCommand({
+			id: 'sync-current-note',
+			name: 'Sync this note',
+			checkCallback: (checking) => {
+				const id = this.activeDocumentId();
+				if (id === null) return false;
+				if (!checking) void this.sync(true, { ids: [id] });
+				return true;
+			},
+		});
+
+		this.addCommand({
+			id: 'search',
+			name: 'Search documents',
+			callback: () => {
+				new PaperlessSearchModal(this.app, this.searchContext(), (file) => {
+					void this.app.workspace.getLeaf(false).openFile(file);
+				}).open();
+			},
+		});
+
+		this.addCommand({
+			id: 'insert-link',
+			name: 'Insert link to document',
+			editorCallback: (editor, view) => {
+				const sourcePath = view.file?.path ?? '';
+				new PaperlessSearchModal(this.app, this.searchContext(), (file) => {
+					editor.replaceSelection(this.app.fileManager.generateMarkdownLink(file, sourcePath));
+				}).open();
+			},
+		});
+
+		this.addCommand({
+			id: 'show-removed',
+			name: 'Show notes of removed documents',
+			callback: () => {
+				new RemovedDocumentsModal(this.app, this.removedNotes(), this.archiveFolder()).open();
 			},
 		});
 
@@ -90,8 +146,9 @@ export default class PaperlessSyncPlugin extends Plugin {
 	/**
 	 * Runs a sync. A manual sync always reports its outcome; an automatic one stays quiet
 	 * unless there is something to see, so that being offline never interrupts the user.
+	 * A scope limits the sync to some documents.
 	 */
-	async sync(manual: boolean): Promise<SyncResult | null> {
+	async sync(manual: boolean, scope?: SyncScope): Promise<SyncResult | null> {
 		if (this.syncing) {
 			if (manual) new Notice('Paperless sync is already running.');
 			return null;
@@ -106,10 +163,19 @@ export default class PaperlessSyncPlugin extends Plugin {
 		}
 
 		this.syncing = true;
-		this.setStatus('Paperless: syncing…', 'Paperless sync is running.');
+		if (scope === undefined) this.setStatus('Paperless: syncing…', 'Paperless sync is running.');
 		try {
-			const result = await runSync(client, new ObsidianVault(this.app), this.syncOptions());
+			const result = await runSync(
+				client,
+				new ObsidianVault(this.app),
+				this.syncOptions(),
+				scope,
+			);
 			const summary = summarize(result);
+			if (scope !== undefined) {
+				if (manual) new Notice(summary);
+				return result;
+			}
 			this.setStatus(`Paperless: ${currentTime()}`, summary);
 			const problems = problemKey(result);
 			const noteworthy =
@@ -121,7 +187,7 @@ export default class PaperlessSyncPlugin extends Plugin {
 			return result;
 		} catch (error) {
 			const message = describeError(error);
-			this.setStatus('Paperless: sync failed', message);
+			if (scope === undefined) this.setStatus('Paperless: sync failed', message);
 			if (manual) new Notice(message);
 			if (!(error instanceof PaperlessError)) console.error(error);
 			return null;
@@ -140,6 +206,75 @@ export default class PaperlessSyncPlugin extends Plugin {
 		} catch (error) {
 			new Notice(describeError(error));
 		}
+	}
+
+	/** The note of the document, created by syncing the document if there is none yet. */
+	async noteForDocument(id: number): Promise<TFile | null> {
+		const existing = this.findNote(id);
+		if (existing !== null) return existing;
+		// A manual sync reports why no note was created, for example a tag filter.
+		const result = await this.sync(true, { ids: [id] });
+		const path = result?.createdPaths[0];
+		return (path === undefined ? null : this.app.vault.getFileByPath(path)) ?? this.findNote(id);
+	}
+
+	/** The note of a document, preferring one that is not flagged as removed. */
+	findNote(id: number): TFile | null {
+		let found: TFile | null = null;
+		for (const file of this.app.vault.getMarkdownFiles()) {
+			const properties = this.app.metadataCache.getFileCache(file)?.frontmatter;
+			if (readDocumentId(properties) !== id) continue;
+			if (properties?.[PROPERTY.missing] !== true) return file;
+			found ??= file;
+		}
+		return found;
+	}
+
+	private removedNotes(): TFile[] {
+		return this.app.vault.getMarkdownFiles().filter((file) => {
+			const properties = this.app.metadataCache.getFileCache(file)?.frontmatter;
+			return readDocumentId(properties) !== null && properties?.[PROPERTY.missing] === true;
+		});
+	}
+
+	private archiveFolder(): string {
+		return resolveArchiveFolder(this.settings.archiveFolder, this.settings.folder);
+	}
+
+	private activeDocumentId(): number | null {
+		const file = this.app.workspace.getActiveViewOfType(MarkdownView)?.file ?? null;
+		if (file === null) return null;
+		return readDocumentId(this.app.metadataCache.getFileCache(file)?.frontmatter);
+	}
+
+	private openInPaperless(id: number): void {
+		const base = this.linkBaseUrl();
+		if (base === '') {
+			new Notice('Enter the server address in the plugin settings first.');
+			return;
+		}
+		window.open(documentUrl(base, id));
+	}
+
+	private searchContext(): SearchContext {
+		return {
+			createClient: () => this.createClient(),
+			filterOptions: (): TagFilterOptions => ({
+				includeTags: this.settings.includeTags,
+				excludeTags: this.settings.excludeTags,
+			}),
+			findNote: (id) => this.findNote(id),
+			noteForDocument: (id) => this.noteForDocument(id),
+			describeError,
+		};
+	}
+
+	private linkBaseUrl(): string {
+		return (
+			normalizeServerUrl(this.settings.linkBaseUrl) ??
+			normalizeServerUrl(this.settings.serverUrl) ??
+			''
+		);
 	}
 
 	private createClient(): PaperlessClient {
@@ -167,13 +302,13 @@ export default class PaperlessSyncPlugin extends Plugin {
 					? DEFAULT_SETTINGS.fileNameTemplate
 					: this.settings.fileNameTemplate,
 			noteTemplate: this.settings.noteTemplate,
-			linkBaseUrl:
-				normalizeServerUrl(this.settings.linkBaseUrl) ??
-				normalizeServerUrl(this.settings.serverUrl) ??
-				'',
+			linkBaseUrl: this.linkBaseUrl(),
 			linkMetadata: this.settings.linkMetadata,
 			includeCustomFields: this.settings.includeCustomFields,
 			contentTag: this.settings.contentTag,
+			includeNotes: this.settings.includeNotes,
+			includeTags: this.settings.includeTags,
+			excludeTags: this.settings.excludeTags,
 		};
 	}
 
@@ -207,10 +342,16 @@ function summarize(result: SyncResult): string {
 		`${result.updated} updated`,
 		`${result.unchanged} unchanged`,
 	];
+	if (result.excluded > 0) {
+		parts.push(`${result.excluded} skipped by the tag filters`);
+	}
 	if (result.missing > 0) {
 		parts.push(`${result.missing} no longer in Paperless-ngx`);
 	}
 	let summary = `Paperless sync: ${parts.join(', ')}.`;
+	if (result.missing > 0) {
+		summary += ' Run "Show notes of removed documents" to review them.';
+	}
 	if (result.failures.length > 0) {
 		const first = result.failures[0];
 		summary += ` ${count(result.failures.length, 'document')} failed`;

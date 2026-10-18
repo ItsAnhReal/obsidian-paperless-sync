@@ -31,4 +31,9 @@ export default defineConfig(
 		},
 	},
 	...obsidianmd.configs.recommended,
+	{
+		rules: {
+			'obsidianmd/ui/sentence-case': ['warn', { ignoreWords: ['Paperless-ngx'] }],
+		},
+	},
 );

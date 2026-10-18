@@ -54,6 +54,13 @@ const server = createServer((request, response) => {
 	}
 	const ids = url.searchParams.get('id__in')?.split(',').map(Number);
 	if (ids !== undefined) items = items.filter((item) => ids.includes(item.id));
+	// Stands in for the full text search: matches title and text, without ranking.
+	const query = url.searchParams.get('query')?.toLowerCase();
+	if (query !== undefined) {
+		items = items.filter((item) =>
+			`${item.title ?? ''} ${item.content ?? ''}`.toLowerCase().includes(query),
+		);
+	}
 	const page = Number(url.searchParams.get('page') ?? '1');
 	const pageSize = Number(url.searchParams.get('page_size') ?? '25');
 	const start = (page - 1) * pageSize;

@@ -6,6 +6,7 @@ import type {
 	NamedItem,
 	Paginated,
 	PaperlessDocument,
+	SearchHit,
 	ServerInfo,
 } from './types';
 
@@ -55,11 +56,22 @@ const DOCUMENT_FIELDS = [
 	'tags',
 	'created',
 	'added',
+	'modified',
 	'archive_serial_number',
 ];
 
+const SEARCH_FIELDS = 'id,title,created,correspondent,tags';
+
 export interface DocumentListOptions {
 	includeCustomFields: boolean;
+	includeNotes: boolean;
+}
+
+function documentFields(options: DocumentListOptions): string {
+	const fields = [...DOCUMENT_FIELDS];
+	if (options.includeCustomFields) fields.push('custom_fields');
+	if (options.includeNotes) fields.push('notes');
+	return fields.join(',');
 }
 
 /** Trims the URL and removes trailing slashes. Returns `null` if it isn't an http(s) URL. */
@@ -113,16 +125,34 @@ export class PaperlessClient {
 	}
 
 	async listDocuments(options: DocumentListOptions): Promise<DocumentListing> {
-		const fields = [...DOCUMENT_FIELDS];
-		if (options.includeCustomFields) fields.push('custom_fields');
 		const { items, count } = await this.listAll<PaperlessDocument>(
 			'/api/documents/',
-			{ ordering: 'id', fields: fields.join(',') },
+			{ ordering: 'id', fields: documentFields(options) },
 		);
 		const byId = new Map<number, PaperlessDocument>();
 		for (const document of items) byId.set(document.id, document);
 		const documents = [...byId.values()].sort((a, b) => a.id - b.id);
 		return { documents, complete: documents.length >= count };
+	}
+
+	/** Fetches the given documents, sorted by ID. Documents that no longer exist are left out. */
+	async fetchDocuments(
+		ids: readonly number[],
+		options: DocumentListOptions,
+	): Promise<PaperlessDocument[]> {
+		const documents = await this.listByIds<PaperlessDocument>(ids, documentFields(options));
+		return documents.sort((a, b) => a.id - b.id);
+	}
+
+	/** Runs the Paperless-ngx full text search and returns the best matches. */
+	async search(query: string, limit: number): Promise<SearchHit[]> {
+		const { body } = await this.get<Paginated<SearchHit>>('/api/documents/', {
+			query,
+			page: '1',
+			page_size: String(limit),
+			fields: SEARCH_FIELDS,
+		});
+		return body.results;
 	}
 
 	/** Fetches the text of the given documents. Documents that no longer exist are left out. */

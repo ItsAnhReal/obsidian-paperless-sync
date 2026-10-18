@@ -31,6 +31,7 @@ paperless_tags:
   - Home
 paperless_created: 2024-03-15
 paperless_added: 2024-03-16
+paperless_modified: 2024-03-18
 paperless_field_amount: EUR84.50
 ---
 [Open in Paperless](https://paperless.example.com/documents/2/details)
@@ -43,6 +44,9 @@ Write anything you like below. The plugin never touches it.
 |  |  |
 | --- | --- |
 | 🗂️ **One note per document** | Title, correspondent, type, tags, dates, ASN, storage path and custom fields as real Obsidian properties. |
+| 🔎 **Search from Obsidian** | Search the full text of Paperless-ngx from the command palette and open the note or insert a link to it. Documents without a note get one on the spot. |
+| 🏷️ **Choose what syncs** | Sync only documents with certain tags, or skip documents tagged `private`. |
+| 💬 **Paperless-ngx notes** | Optionally keep the notes you write on a document in Paperless-ngx in its Obsidian note. |
 | 🔗 **Links, not copies** | Each note links to the original in Paperless-ngx. Turn on *link metadata* and correspondents and document types become `[[links]]` with their own backlinks. |
 | 🔍 **Query your paperwork** | Filter and sort with Bases, Dataview or plain search, like any other note. |
 | ✍️ **Your notes stay yours** | Only the `paperless_*` properties are managed. Text you write and properties you add are never overwritten. |
@@ -86,7 +90,7 @@ flowchart LR
 
 - **New document** → a new note is created from your file name and note templates.
 - **Changed document** → only the `paperless_*` properties are updated, plus the document text section if you [opted the document in](#-document-text-for-selected-documents).
-- **Deleted document** → the note stays and gets `paperless_missing: true`. If the document comes back, the flag goes away.
+- **Deleted document** → the note stays and gets `paperless_missing: true`. If the document comes back, the flag goes away. **Show notes of removed documents** lists these notes and can move them into an archive folder.
 
 ## 🚀 Setup
 
@@ -119,10 +123,14 @@ flowchart LR
 | Note text | Template for the text of new notes. |
 | Link correspondents and document types | Writes them as `[[links]]`, so each can have its own note with backlinks. |
 | Document text tag | Documents with this tag get their text in a collapsed section of their note. Empty by default, which keeps all document text out of the vault. |
+| Include Paperless-ngx notes | Keeps the notes written on each document in Paperless-ngx in a collapsed section of its note. Off by default. |
 | Include custom fields | Adds custom fields as `paperless_field_<name>` properties. |
+| Only documents with these tags | Comma separated tags. If set, only documents with one of them get a note. |
+| Skip documents with these tags | Comma separated tags. Documents with one of them get no note, and existing notes are no longer updated. |
 | Sync automatically on this device | Syncs at startup and at the interval. Stored per device. On by default. |
 | Sync interval | Minutes between automatic syncs. `0` syncs at startup only. |
 | Address for links | Base address for document links, if it differs from the server address. |
+| Folder for removed documents | Where notes of removed documents are moved. Default: `Removed` inside the notes folder. |
 
 </details>
 
@@ -137,7 +145,18 @@ Example: `{{created_year}}/{{correspondent}}/{{created}} {{title}}` sorts notes 
 
 </details>
 
-Run **Paperless Sync: Sync now** from the command palette at any time.
+## ⌨️ Commands
+
+| Command | What it does |
+| --- | --- |
+| Sync now | Syncs all documents. |
+| Sync this note | Syncs only the document of the open note. |
+| Open document in Paperless-ngx | Opens the document of the open note in your browser. |
+| Search documents | Searches the full text of Paperless-ngx and opens the note of the document you pick, creating it if needed. |
+| Insert link to document | Like search, but inserts a link to the note at the cursor. |
+| Show notes of removed documents | Lists notes whose document is gone from Paperless-ngx and moves them into the folder for removed documents. Links to them are updated. |
+
+Give the ones you use often a hotkey under **Settings → Hotkeys**.
 
 ## 📝 Document text for selected documents
 
@@ -155,6 +174,26 @@ Most paperwork doesn't belong in a vault that is synced to the cloud or read by 
 - Only tagged documents have their text downloaded.
 - If the API user may not read tags, existing sections are left as they are.
 - Clearing the setting stops the plugin from touching note text. Sections that already exist stay, so remove the tag from those documents first if you want them gone.
+
+## 🏷️ Choosing what syncs
+
+By default every document gets a note. Use **Only documents with these tags** to sync a selection, for example `Steuer, Wohnung`, and **Skip documents with these tags** to keep some out, for example `private`. A document with a skipped tag is never synced, even if it also has an included tag. Search hides skipped documents too.
+
+Notes that already exist for a skipped document stay where they are. They are no longer updated and are not flagged as removed. If the API user may not read tags, the sync stops instead of guessing.
+
+## 💬 Paperless-ngx notes
+
+Turn on **Include Paperless-ngx notes** and the notes written on a document in Paperless-ngx appear in a collapsed section of its note, oldest first, with date and author:
+
+```markdown
+%% paperless-notes start %%
+> [!note]- Paperless notes
+> **2024-03-15, anh**
+> Paid the deposit.
+%% paperless-notes end %%
+```
+
+Like the document text section, it is updated on every sync and removed when the document has no notes left. Turning the setting off leaves existing sections as they are.
 
 ## 💡 Good to know
 

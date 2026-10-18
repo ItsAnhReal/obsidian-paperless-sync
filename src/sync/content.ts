@@ -1,4 +1,5 @@
 import type { Lookups } from '../paperless/types';
+import { applySection, quoteLines, type SectionMarkers } from './sections';
 
 /**
  * The document text section is the only part of a note's text that the sync changes after
@@ -7,6 +8,7 @@ import type { Lookups } from '../paperless/types';
  */
 export const CONTENT_START = '%% paperless-content start %%';
 export const CONTENT_END = '%% paperless-content end %%';
+export const CONTENT_MARKERS: SectionMarkers = { start: CONTENT_START, end: CONTENT_END };
 
 const CALLOUT_HEADER = '> [!quote]- Document text';
 
@@ -32,35 +34,13 @@ export function contentTagIds(tagName: string, lookups: Lookups): Set<number> | 
 export function renderContentSection(content: string | undefined): string | null {
 	const text = (content ?? '').replace(/\r\n?/g, '\n').trim();
 	if (text === '') return null;
-	const quoted = text
-		.split('\n')
-		.map((line) => (line.trim() === '' ? '>' : `> ${line.trimEnd()}`));
-	return [CONTENT_START, CALLOUT_HEADER, ...quoted, CONTENT_END].join('\n');
+	return [CONTENT_START, CALLOUT_HEADER, ...quoteLines(text), CONTENT_END].join('\n');
 }
 
 /**
  * Puts the section into the note text, replacing an existing one, or removes it if
- * `section` is `null`. A new section goes at the end, after a blank line. Throws if the note
- * has a start marker without an end marker, because then it is unclear what to replace.
+ * `section` is `null`. See `applySection`.
  */
 export function applyContentSection(text: string, section: string | null): string {
-	const lines = text.split('\n');
-	const start = lines.indexOf(CONTENT_START);
-	if (start === -1) {
-		if (section === null) return text;
-		const trimmed = text.replace(/\n+$/, '');
-		return trimmed === '' ? `${section}\n` : `${trimmed}\n\n${section}\n`;
-	}
-	const end = lines.indexOf(CONTENT_END, start + 1);
-	if (end === -1) {
-		throw new Error(
-			`The note has "${CONTENT_START}" without "${CONTENT_END}". Remove the document text section and sync again.`,
-		);
-	}
-	if (section !== null) {
-		return [...lines.slice(0, start), section, ...lines.slice(end + 1)].join('\n');
-	}
-	// Also remove the blank line that was added in front of the section.
-	const from = start > 0 && lines[start - 1] === '' ? start - 1 : start;
-	return [...lines.slice(0, from), ...lines.slice(end + 1)].join('\n');
+	return applySection(text, CONTENT_MARKERS, section);
 }

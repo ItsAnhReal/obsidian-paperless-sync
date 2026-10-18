@@ -7,7 +7,7 @@ import {
 } from '../src/paperless/client';
 import { createFakeServer, makeDocument, SERVER, TOKEN } from './helpers';
 
-const LIST_OPTIONS = { includeCustomFields: false };
+const LIST_OPTIONS = { includeCustomFields: false, includeNotes: false };
 
 async function kindOf(action: Promise<unknown>): Promise<string> {
 	try {
@@ -77,14 +77,14 @@ describe('PaperlessClient', () => {
 		expect(params?.get('ordering')).toBe('id');
 		expect(params?.get('page_size')).toBe('100');
 		expect(params?.get('fields')).toBe(
-			'id,title,correspondent,document_type,storage_path,tags,created,added,archive_serial_number',
+			'id,title,correspondent,document_type,storage_path,tags,created,added,modified,archive_serial_number',
 		);
 	});
 
 	it('requests custom fields only when asked and never the document text', async () => {
 		const server = createFakeServer({ documents: [makeDocument({ id: 1, content: 'text' })] });
 		const client = new PaperlessClient(SERVER, TOKEN, server.httpGet);
-		const listing = await client.listDocuments({ includeCustomFields: true });
+		const listing = await client.listDocuments({ includeCustomFields: true, includeNotes: false });
 		expect(server.requests[0]?.url.searchParams.get('fields')).toMatch(/,custom_fields$/);
 		expect(listing.documents[0]).not.toHaveProperty('content');
 	});
@@ -193,5 +193,26 @@ describe('PaperlessClient', () => {
 		const offline: HttpGet = () => Promise.reject(new Error('boom'));
 		const error = await new PaperlessClient(SERVER, 'super-secret', offline).connect().catch((e: unknown) => e);
 		expect(String(error)).not.toContain('super-secret');
+	});
+
+	it('searches the full text and asks only for the fields the search shows', async () => {
+		const server = createFakeServer({ documents: [makeDocument({ id: 1, title: 'Mietvertrag', content: 'text' })] });
+		const client = new PaperlessClient(SERVER, TOKEN, server.httpGet);
+		const hits = await client.search('miete', 20);
+		const params = server.requests[0]?.url.searchParams;
+		expect(params?.get('query')).toBe('miete');
+		expect(params?.get('page_size')).toBe('20');
+		expect(hits).toEqual([{ id: 1, title: 'Mietvertrag', created: '2024-01-15', correspondent: null, tags: [] }]);
+	});
+
+	it('fetches selected documents with their notes when asked', async () => {
+		const notes = [{ id: 1, note: 'Notiz', created: '2024-03-01' }];
+		const server = createFakeServer({
+			documents: [makeDocument({ id: 2, notes }), makeDocument({ id: 1 }), makeDocument({ id: 3 })],
+		});
+		const client = new PaperlessClient(SERVER, TOKEN, server.httpGet);
+		const documents = await client.fetchDocuments([3, 2, 99], { includeCustomFields: false, includeNotes: true });
+		expect(documents.map((document) => document.id)).toEqual([2, 3]);
+		expect(documents[0]?.notes).toEqual(notes);
 	});
 });
