@@ -6,5 +6,5 @@
 	"description": "Sync document metadata from Paperless-ngx into notes. Creates one note per document with properties you can link and query.",
 	"author": "ItsAnhReal",
 	"authorUrl": "https://github.com/ItsAnhReal",
-	"isDesktopOnly": false
+	"isDesktopOnly": true
 }
